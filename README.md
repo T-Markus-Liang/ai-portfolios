@@ -22,6 +22,7 @@
 
 - 默认每天**北京时间 07:00**自动跑（GitHub Actions cron `0 23 * * *` UTC）。
 - 也可在 Actions 页面手动 `Run workflow`。
+- 手动触发时可设置 `force_lookback_days`，用于强制回溯 N 天测试 LLM；此模式不会写回 `last_seen.json`。
 
 ## 链路
 
@@ -100,6 +101,7 @@ scripts/  小工具（ping、Discord 推送）
 prompts/  LLM prompt（system.md / daily_brief.md）
 data/     last_seen.json + 原始抓取 raw_*.json（raw 被 .gitignore 忽略）
 reports/  生成的 markdown 报告（被 .gitignore 忽略）
+reports/summaries/  LLM 总结归档（提交到仓库，便于追踪历史观点）
 .github/workflows/  定时任务
 ```
 

@@ -21,6 +21,9 @@ data/*
 # reports: ignore generated files but keep folder
 reports/*
 !reports/.gitkeep
+!reports/summaries/
+!reports/summaries/.gitkeep
+!reports/summaries/*.md
 
 # os / editor
 .DS_Store

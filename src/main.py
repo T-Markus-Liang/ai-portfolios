@@ -30,6 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = ROOT / "config"
 DATA_DIR = ROOT / "data"
 REPORTS_DIR = ROOT / "reports"
+SUMMARY_DIR = REPORTS_DIR / "summaries"
 STATE_PATH = DATA_DIR / "last_seen.json"
 
 SH = ZoneInfo("Asia/Shanghai")
@@ -37,6 +38,7 @@ SH = ZoneInfo("Asia/Shanghai")
 NEW_ACCOUNT_LOOKBACK_DAYS = 7
 NEW_ACCOUNT_FETCH_COUNT = 100
 TRACKED_FETCH_COUNT = 40
+MAX_SUMMARY_LINKS_PER_KOL = 8
 
 # Use package-style imports; main is launched via `python -m src.main`.
 if __package__ in (None, ""):
@@ -234,6 +236,15 @@ def _build_discord_title(source_counts: dict[str, int], total_new: int, llm_fail
     return title
 
 
+def _force_lookback_days() -> int:
+    raw = (os.environ.get("FORCE_LOOKBACK_DAYS") or "0").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return 0
+    return max(0, min(value, 30))
+
+
 def _render_summary_markdown(
     now_sh: dt.datetime,
     summary_md: str,
@@ -262,18 +273,40 @@ def _render_summary_markdown(
             continue
         lines.append(f"<details><summary>@{item['handle']}（{len(new_tweets)} 条）</summary>")
         lines.append("")
-        for tweet in new_tweets[:20]:
+        for tweet in new_tweets[:MAX_SUMMARY_LINKS_PER_KOL]:
             lines.append(_fmt_tweet_link(tweet))
+        if len(new_tweets) > MAX_SUMMARY_LINKS_PER_KOL:
+            lines.append(f"- ... 另有 {len(new_tweets) - MAX_SUMMARY_LINKS_PER_KOL} 条见 artifact/raw JSON")
         lines.append("")
         lines.append("</details>")
         lines.append("")
     return "\n".join(lines)
 
 
+def _write_summary_archive(now_sh: dt.datetime, report_md: str, total_new: int, source_counts: dict[str, int]) -> Path:
+    SUMMARY_DIR.mkdir(parents=True, exist_ok=True)
+    source_summary = ", ".join(f"{key}:{value}" for key, value in sorted(source_counts.items())) or "none"
+    path = SUMMARY_DIR / f"{now_sh.strftime('%Y-%m-%d_%H%M')}_market-brief.md"
+    front_matter = "\n".join(
+        [
+            "---",
+            f"date: {now_sh.isoformat()}",
+            f"total_new: {total_new}",
+            f"sources: \"{source_summary}\"",
+            "---",
+            "",
+        ]
+    )
+    path.write_text(front_matter + report_md, encoding="utf-8")
+    return path
+
+
 def main() -> int:
     now_sh = dt.datetime.now(SH)
     now_utc = dt.datetime.now(dt.timezone.utc)
-    bootstrap_cutoff = now_utc - dt.timedelta(days=NEW_ACCOUNT_LOOKBACK_DAYS)
+    force_days = _force_lookback_days()
+    lookback_days = force_days or NEW_ACCOUNT_LOOKBACK_DAYS
+    bootstrap_cutoff = now_utc - dt.timedelta(days=lookback_days)
 
     DATA_DIR.mkdir(exist_ok=True)
     REPORTS_DIR.mkdir(exist_ok=True)
@@ -287,9 +320,9 @@ def main() -> int:
 
     for handle in handles:
         record = state.get(handle) or {}
-        last_id = record.get("last_tweet_id")
-        mode = "incremental" if last_id else "bootstrap"
-        fetch_count = TRACKED_FETCH_COUNT if last_id else NEW_ACCOUNT_FETCH_COUNT
+        last_id = None if force_days else record.get("last_tweet_id")
+        mode = "force_bootstrap" if force_days else ("incremental" if last_id else "bootstrap")
+        fetch_count = NEW_ACCOUNT_FETCH_COUNT if not last_id else TRACKED_FETCH_COUNT
 
         tweets, source, errors = _fetch_one_handle(
             handle, nitter_instances, fetch_count, allow_tio
@@ -306,7 +339,9 @@ def main() -> int:
         else:
             new_tweets = _filter_bootstrap(tweets, bootstrap_cutoff)
 
-        if new_tweets:
+        if force_days:
+            pass
+        elif new_tweets:
             newest = str(max(_id_int(t) for t in new_tweets))
             if newest != "0":
                 update_handle(state, handle, newest, now_sh.isoformat())
@@ -325,7 +360,8 @@ def main() -> int:
             }
         )
 
-    save_state(STATE_PATH, state)
+    if not force_days:
+        save_state(STATE_PATH, state)
 
     raw_path = DATA_DIR / f"raw_{now_sh.strftime('%Y%m%d_%H%M')}.json"
     raw_path.write_text(json.dumps(results, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
@@ -363,16 +399,19 @@ def main() -> int:
 
     report_path = REPORTS_DIR / f"report_{now_sh.strftime('%Y%m%d')}.md"
     report_path.write_text(md, encoding="utf-8")
+    summary_path = _write_summary_archive(now_sh, md, total_new, source_counts)
 
     gh_out = os.environ.get("GITHUB_OUTPUT")
     if gh_out:
         with open(gh_out, "a", encoding="utf-8") as fh:
             fh.write(f"report_path={report_path.as_posix()}\n")
+            fh.write(f"summary_path={summary_path.as_posix()}\n")
             fh.write(
                 f"discord_title={_build_discord_title(source_counts, total_new, llm_failed)}\n"
             )
 
     print(f"[OK] report -> {report_path}")
+    print(f"[OK] summary -> {summary_path}")
     print(f"[OK] raw    -> {raw_path}")
     print(f"[OK] state  -> {STATE_PATH}")
     return 0

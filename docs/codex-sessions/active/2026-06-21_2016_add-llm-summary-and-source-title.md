@@ -19,6 +19,7 @@ Continue the existing investment brief project by adding LLM summarization using
 - Added prompt files and `src/summarize.py`.
 - Wired `src/main.py`, workflow env vars, and Discord title output.
 - Added KOL handles: Rocky (`Rocky_Bitcoin`), Serenity (`aleabitoreddit`), 潘驴邓晓闲缺一 (`JohnsonZ91127`).
+- Added force lookback workflow input, LLM summary archive under `reports/summaries/`, and upgraded Discord-friendly report prompt.
 
 ## Decisions
 
@@ -31,7 +32,8 @@ Continue the existing investment brief project by adding LLM summarization using
 - Prompt and summarizer modules exist.
 - Main orchestration calls the summarizer and emits a source-aware Discord title.
 - Current KOL config has three real accounts and no `elonmusk` sample account.
-- Verification with network is best done via GitHub Actions because local secrets were shared in chat and should be rotated.
+- Current KOL config has seven real accounts.
+- Latest Actions run showed `nitter:7`, then `0 新` after `last_seen` was persisted. Use `force_lookback_days` for manual LLM testing.
 
 ## Resume instructions
 

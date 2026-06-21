@@ -5,6 +5,11 @@ on:
     # Beijing 07:00 -> UTC 23:00 (previous day)
     - cron: '0 23 * * *'
   workflow_dispatch:
+    inputs:
+      force_lookback_days:
+        description: 'Force re-read the last N days without using last_seen (0 = normal incremental run)'
+        required: false
+        default: '0'
 
 permissions:
   contents: write
@@ -38,6 +43,7 @@ jobs:
           ARK_API_KEY: ${{ secrets.ARK_API_KEY }}
           ARK_BASE_URL: ${{ secrets.ARK_BASE_URL }}
           ARK_MODEL: ${{ secrets.ARK_MODEL }}
+          FORCE_LOOKBACK_DAYS: ${{ github.event.inputs.force_lookback_days || '0' }}
         run: |
           python -m src.main
 
@@ -52,18 +58,21 @@ jobs:
       - name: Persist last_seen.json
         if: always()
         run: |
-          if [ -f data/last_seen.json ]; then
-            git config user.name  "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add data/last_seen.json
-            if ! git diff --cached --quiet; then
-              git commit -m "chore(state): update last_seen.json [skip ci]"
-              git push
-            else
-              echo "last_seen.json unchanged, skip commit."
-            fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "${{ github.event.inputs.force_lookback_days || '0' }}" != "0" ]; then
+            echo "force_lookback_days is set; persist summaries only."
+            git add reports/summaries/
+          elif [ -f data/last_seen.json ]; then
+            git add data/last_seen.json reports/summaries/
           else
             echo "no last_seen.json to persist."
+          fi
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(state): update last_seen and summaries [skip ci]"
+            git push
+          else
+            echo "state and summaries unchanged, skip commit."
           fi
 
       - name: Upload report artifact
