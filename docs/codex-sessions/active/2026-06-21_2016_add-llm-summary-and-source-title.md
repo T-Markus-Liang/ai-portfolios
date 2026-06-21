@@ -48,6 +48,12 @@ Continue the existing investment brief project, correcting the product positioni
 - Updated `src/main.py` so enabled article sources can combine manual links and RSS feeds, dedupe via state, and avoid repeating the same manual link on later normal runs.
 - Verified manual article import with a local check: first run yields two article items; second run with updated state yields zero repeats.
 
+- Researched WeChat article automation options; public Wechat2RSS did not list `投资人六便士` or `击球区小能手1`, so no ready public RSS URL was found.
+- Added local WeWe RSS deployment files under `docker/wewe-rss/` using `cooderl/wewe-rss-sqlite:latest`.
+- Added `scripts/start_wewe_rss.sh` to start the local WeWe RSS service after Docker Desktop is running.
+- Added `docs/integrations/wechat-rss.md` with setup steps: scan WeChat Reading account, add公众号 share links, copy generated RSS URLs into `config/article_sources.yaml`.
+- Verified YAML and shell syntax; startup is blocked locally because Docker daemon is not running.
+
 ## Decisions
 
 - Use `kimi-k2.6` on `https://ark.cn-beijing.volces.com/api/coding/v3`.
@@ -72,4 +78,4 @@ Continue the existing investment brief project, correcting the product positioni
 
 ## Open questions
 
-- Optional: replace placeholder manual article titles/summaries with real titles/summaries, or add RSS URLs for full automation.
+- Start Docker Desktop, run `scripts/start_wewe_rss.sh`, add the two WeChat article share links in WeWe RSS, then copy generated RSS URLs into `config/article_sources.yaml`.

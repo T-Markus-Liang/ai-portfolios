@@ -1,0 +1,15 @@
+services:
+  wewe-rss:
+    image: cooderl/wewe-rss-sqlite:latest
+    container_name: ai-portfolios-wewe-rss
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - DATABASE_TYPE=sqlite
+      - AUTH_CODE=${WEWE_RSS_AUTH_CODE:-ai-portfolios}
+      - SERVER_ORIGIN_URL=${WEWE_RSS_ORIGIN_URL:-http://127.0.0.1:4000}
+      - CRON_EXPRESSION=35 6 * * *
+      - UPDATE_DELAY_TIME=60s
+    volumes:
+      - ./data:/app/data
