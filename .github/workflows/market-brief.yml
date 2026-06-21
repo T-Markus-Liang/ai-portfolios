@@ -1,0 +1,65 @@
+name: X Market Brief
+
+on:
+  schedule:
+    # Shanghai 08:00 and 20:00 -> UTC 00:00 and 12:00
+    - cron: '0 0,12 * * *'
+  workflow_dispatch:
+    inputs:
+      report_type:
+        description: 'morning | evening | auto'
+        required: false
+        default: 'auto'
+
+permissions:
+  contents: read
+
+jobs:
+  market-brief:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ping twitterapi.io
+        env:
+          TWITTERAPI_IO_KEY: ${{ secrets.TWITTERAPI_IO_KEY }}
+        run: |
+          python scripts/ping_twitterapi.py elonmusk
+
+      - name: Build report
+        id: build
+        env:
+          TWITTERAPI_IO_KEY: ${{ secrets.TWITTERAPI_IO_KEY }}
+          REPORT_TYPE: ${{ github.event.inputs.report_type || 'auto' }}
+        run: |
+          python -m src.main
+
+      - name: Send to Discord
+        if: ${{ steps.build.outputs.report_path != '' }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          python scripts/send_discord.py "${{ steps.build.outputs.report_path }}" \
+            --title "Market Brief (${{ steps.build.outputs.report_type }})"
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-brief-report
+          path: |
+            reports/
+            data/
+          if-no-files-found: ignore
