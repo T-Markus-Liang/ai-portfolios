@@ -4,13 +4,13 @@
 - Session id: current-thread
 - Project: ai-portfolios
 - Workspace: /Users/markus/投资组合
-- Task: Add Volcengine Ark LLM summary and Discord source-aware title
+- Task: Improve investment brief synthesis, Chinese filenames, and evidence appendix
 - Status: in_progress
 - Branch: main
 
 ## User request summary
 
-Continue the existing investment brief project by adding LLM summarization using Volcengine Ark and improving Discord titles to show source usage.
+Continue the existing investment brief project by improving investment synthesis output, ensuring KOL display names are included in LLM input, using Chinese report filenames, and removing the extra raw tweet appendix.
 
 ## Work done
 
@@ -24,6 +24,16 @@ Continue the existing investment brief project by adding LLM summarization using
 - Upgraded rendering plan to Markdown -> HTML/CSS -> Chromium PDF, with ReportLab fallback.
 - Redesigned prompt around investment synthesis: consensus, disagreement, evidence strength, opportunity matrix, validation checklist.
 
+
+- Updated `src/main.py` so KOL display names are loaded with handles and passed into flattened LLM items, e.g. `上头资本（@sixpanny159920）`.
+- Changed Discord title prefix from English `Market Brief` to Chinese `美股成长股日报`.
+- Changed generated report/archive Markdown filenames to pure Chinese date names.
+- Removed the automatically appended `附：原始推文链接` details appendix from final reports.
+- Updated `prompts/daily_brief.md` so links only appear in the curated `证据链摘录` section and every KOL with new tweets must be considered or explicitly downgraded.
+- Ran `python3 -m py_compile src/main.py src/summarize.py scripts/render_report_pdf.py scripts/send_discord.py`.
+- Ran an offline structural validation using sample `上头资本` data; confirmed Chinese filenames, no raw-link appendix, and KOL display name packing.
+- Attempted local PDF rendering, but local Python lacks `playwright` and `reportlab`; GitHub Actions installs both, so rendering remains expected to work in CI.
+
 ## Decisions
 
 - Use `kimi-k2.6` on `https://ark.cn-beijing.volces.com/api/coding/v3`.
@@ -33,9 +43,10 @@ Continue the existing investment brief project by adding LLM summarization using
 ## Current state
 
 - Prompt and summarizer modules exist.
-- Main orchestration calls the summarizer and emits a source-aware Discord title.
-- Current KOL config has three real accounts and no `elonmusk` sample account.
+- Main orchestration calls the summarizer and emits a Chinese source-aware Discord title.
 - Current KOL config has seven real accounts.
+- KOL display names are included in LLM inputs, so `上头资本（@sixpanny159920）` is visible when that account has new tweets.
+- Reports no longer append the raw tweet link appendix; curated links remain only in `证据链摘录`.
 - Latest Actions run showed `nitter:7`, then `0 新` after `last_seen` was persisted. Use `force_lookback_days` for manual LLM testing.
 
 ## Resume instructions
@@ -46,4 +57,4 @@ Continue the existing investment brief project by adding LLM summarization using
 
 ## Open questions
 
-- Remaining requested handles: 华尔街观察Xtrader, 库哥, 李志 | Rational Investing.
+- Need one GitHub Actions manual run with `force_lookback_days=1` to verify Discord attachment uses the new Chinese filename and revised synthesis prompt.

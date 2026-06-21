@@ -38,7 +38,6 @@ SH = ZoneInfo("Asia/Shanghai")
 NEW_ACCOUNT_LOOKBACK_DAYS = 7
 NEW_ACCOUNT_FETCH_COUNT = 100
 TRACKED_FETCH_COUNT = 40
-MAX_SUMMARY_LINKS_PER_KOL = 8
 
 # Use package-style imports; main is launched via `python -m src.main`.
 if __package__ in (None, ""):
@@ -56,16 +55,19 @@ else:
     from .summarize import LLMError, summarize
 
 
-def _load_handles() -> list[str]:
+def _load_kol_accounts() -> list[dict[str, str]]:
     path = CONFIG_DIR / "kol_accounts.yaml"
     if not path.exists():
         return []
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return [
-        (item.get("handle") or "").strip()
-        for item in (data.get("kol_accounts") or [])
-        if (item.get("handle") or "").strip()
-    ]
+    accounts: list[dict[str, str]] = []
+    for item in data.get("kol_accounts") or []:
+        handle = (item.get("handle") or "").strip()
+        if not handle:
+            continue
+        name = (item.get("name") or handle).strip()
+        accounts.append({"name": name, "handle": handle})
+    return accounts
 
 
 def _load_nitter_instances() -> list[str] | None:
@@ -131,14 +133,6 @@ def _fmt_tweet(t: dict) -> str:
     return f"  - [{created}] {text}{meta} {url}".rstrip()
 
 
-def _fmt_tweet_link(t: dict) -> str:
-    text = (t.get("text") or "").replace("\n", " ").strip()
-    if len(text) > 140:
-        text = text[:140] + "…"
-    url = t.get("url") or ""
-    return f"- {text} — {url}"
-
-
 def _fetch_one_handle(
     handle: str,
     nitter_instances: list[str] | None,
@@ -186,6 +180,7 @@ def _render_raw_markdown(now_sh: dt.datetime, results: list[dict], llm_error: st
         lines.append("- 当前未配置任何 KOL handle，请在 `config/kol_accounts.yaml` 中补充。")
     else:
         for item in results:
+            name = item.get("name") or item["handle"]
             handle = item["handle"]
             mode = item["mode"]
             new_tweets = item.get("new_tweets") or []
@@ -197,7 +192,7 @@ def _render_raw_markdown(now_sh: dt.datetime, results: list[dict], llm_error: st
                 lines.append(f"- @{handle} : 抓取失败 ({err_summary})")
                 continue
             total_new += len(new_tweets)
-            lines.append(f"- @{handle} : 新增 {len(new_tweets)} 条（{tag}，来源 {source}）")
+            lines.append(f"- {name}（@{handle}）: 新增 {len(new_tweets)} 条（{tag}，来源 {source}）")
             for t in new_tweets:
                 lines.append(_fmt_tweet(t))
     lines += [
@@ -221,19 +216,60 @@ def _flatten_new_tweets(results: list[dict]) -> list[dict]:
     flat: list[dict] = []
     for item in results:
         handle = item["handle"]
+        name = item.get("name") or handle
+        kol_label = f"{name}（@{handle}）" if name and name != handle else f"@{handle}"
         for tweet in item.get("new_tweets") or []:
             enriched = dict(tweet)
-            enriched["kol"] = handle
+            enriched["kol"] = kol_label
+            enriched["name"] = name
+            enriched["handle"] = handle
             flat.append(enriched)
     return flat
 
 
 def _build_discord_title(source_counts: dict[str, int], total_new: int, llm_failed: bool) -> str:
     source_summary = " / ".join(f"{key}:{value}" for key, value in sorted(source_counts.items())) or "none"
-    title = f"Market Brief · {source_summary} · {total_new} 新"
+    title = f"美股成长股日报 · {source_summary} · {total_new} 新"
     if llm_failed:
         title += " · llm-failed"
     return title
+
+
+def _date_ymd(now_sh: dt.datetime) -> str:
+    return now_sh.strftime("%Y%m%d")
+
+
+def _cn_digits(value: int, width: int | None = None) -> str:
+    digits = "零一二三四五六七八九"
+    text = f"{value:0{width}d}" if width else str(value)
+    return "".join(digits[int(ch)] for ch in text)
+
+
+def _cn_number(value: int) -> str:
+    if value < 10:
+        return _cn_digits(value)
+    if value == 10:
+        return "十"
+    if value < 20:
+        return "十" + _cn_digits(value % 10)
+    tens, ones = divmod(value, 10)
+    return _cn_digits(tens) + "十" + (_cn_digits(ones) if ones else "")
+
+
+def _cn_date(now_sh: dt.datetime) -> str:
+    return f"{_cn_digits(now_sh.year)}年{_cn_number(now_sh.month)}月{_cn_number(now_sh.day)}日"
+
+
+def _cn_datetime(now_sh: dt.datetime) -> str:
+    return f"{_cn_date(now_sh)}{_cn_number(now_sh.hour)}时{_cn_digits(now_sh.minute, 2)}分"
+
+
+def _report_path(now_sh: dt.datetime) -> Path:
+    return REPORTS_DIR / f"美股成长股日报{_cn_date(now_sh)}.md"
+
+
+def _summary_archive_path(now_sh: dt.datetime) -> Path:
+    return SUMMARY_DIR / f"{_cn_datetime(now_sh)}美股成长股日报.md"
 
 
 def _force_lookback_days() -> int:
@@ -264,29 +300,14 @@ def _render_summary_markdown(
         "",
         summary_md.strip(),
         "",
-        "## 附：原始推文链接",
-        "",
     ]
-    for item in results:
-        new_tweets = item.get("new_tweets") or []
-        if not new_tweets:
-            continue
-        lines.append(f"<details><summary>@{item['handle']}（{len(new_tweets)} 条）</summary>")
-        lines.append("")
-        for tweet in new_tweets[:MAX_SUMMARY_LINKS_PER_KOL]:
-            lines.append(_fmt_tweet_link(tweet))
-        if len(new_tweets) > MAX_SUMMARY_LINKS_PER_KOL:
-            lines.append(f"- ... 另有 {len(new_tweets) - MAX_SUMMARY_LINKS_PER_KOL} 条见 artifact/raw JSON")
-        lines.append("")
-        lines.append("</details>")
-        lines.append("")
     return "\n".join(lines)
 
 
 def _write_summary_archive(now_sh: dt.datetime, report_md: str, total_new: int, source_counts: dict[str, int]) -> Path:
     SUMMARY_DIR.mkdir(parents=True, exist_ok=True)
     source_summary = ", ".join(f"{key}:{value}" for key, value in sorted(source_counts.items())) or "none"
-    path = SUMMARY_DIR / f"{now_sh.strftime('%Y-%m-%d_%H%M')}_market-brief.md"
+    path = _summary_archive_path(now_sh)
     front_matter = "\n".join(
         [
             "---",
@@ -311,14 +332,16 @@ def main() -> int:
     DATA_DIR.mkdir(exist_ok=True)
     REPORTS_DIR.mkdir(exist_ok=True)
 
-    handles = _load_handles()
+    accounts = _load_kol_accounts()
     nitter_instances = _load_nitter_instances()
     allow_tio = _allow_tio_fallback()
 
     state = load_state(STATE_PATH)
     results: list[dict] = []
 
-    for handle in handles:
+    for account in accounts:
+        handle = account["handle"]
+        name = account["name"]
         record = state.get(handle) or {}
         last_id = None if force_days else record.get("last_tweet_id")
         mode = "force_bootstrap" if force_days else ("incremental" if last_id else "bootstrap")
@@ -330,7 +353,7 @@ def main() -> int:
 
         if not tweets:
             results.append(
-                {"handle": handle, "mode": mode, "new_tweets": [], "source": "none", "errors": errors}
+                {"name": name, "handle": handle, "mode": mode, "new_tweets": [], "source": "none", "errors": errors}
             )
             continue
 
@@ -352,6 +375,7 @@ def main() -> int:
 
         results.append(
             {
+                "name": name,
                 "handle": handle,
                 "mode": mode,
                 "new_tweets": new_tweets,
@@ -397,7 +421,7 @@ def main() -> int:
     else:
         md = _render_raw_markdown(now_sh, results, llm_error)
 
-    report_path = REPORTS_DIR / f"report_{now_sh.strftime('%Y%m%d')}.md"
+    report_path = _report_path(now_sh)
     report_path.write_text(md, encoding="utf-8")
     summary_path = _write_summary_archive(now_sh, md, total_new, source_counts)
 
