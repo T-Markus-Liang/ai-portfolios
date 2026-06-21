@@ -15,13 +15,13 @@ cd docker/wewe-rss
 WEWE_RSS_AUTH_CODE='换成你自己的访问码' docker compose up -d
 ```
 
-默认访问：`http://127.0.0.1:4000`。本配置使用官方 SQLite 镜像 `cooderl/wewe-rss-sqlite:latest`。
+默认访问：`http://127.0.0.1:4010`。本配置使用官方 SQLite 镜像 `cooderl/wewe-rss-sqlite:latest`。
 
 > `docker/wewe-rss/data/` 是本地数据目录，不要提交到 Git。
 
 ## 添加公众号
 
-1. 打开 `http://127.0.0.1:4000`。
+1. 打开 `http://127.0.0.1:4010`。
 2. 用 `WEWE_RSS_AUTH_CODE` 登录。
 3. 使用公众号文章分享链接添加公众号：
    - `https://mp.weixin.qq.com/s/MX4sDg8SMD1ZeLWPJzRnKA`
@@ -36,7 +36,7 @@ article_sources:
   - name: 投资人六便士
     kind: wechat
     enabled: true
-    rss_url: "http://127.0.0.1:4000/feeds/xxx.xml"
+    rss_url: "http://127.0.0.1:4010/feeds/xxx.xml"
 ```
 
 ## GitHub Actions 注意

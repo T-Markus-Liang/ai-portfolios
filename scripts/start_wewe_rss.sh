@@ -12,6 +12,6 @@ fi
 cd "$COMPOSE_DIR"
 docker compose up -d
 
-echo "WeWe RSS is starting: http://127.0.0.1:4000"
+echo "WeWe RSS is starting: http://127.0.0.1:4010"
 echo "Auth code: ${WEWE_RSS_AUTH_CODE:-ai-portfolios}"
 echo "Next: scan WeChat Reading account, then add official-account share links."

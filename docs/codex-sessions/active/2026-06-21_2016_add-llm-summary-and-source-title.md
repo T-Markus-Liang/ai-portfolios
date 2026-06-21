@@ -54,6 +54,10 @@ Continue the existing investment brief project, correcting the product positioni
 - Added `docs/integrations/wechat-rss.md` with setup steps: scan WeChat Reading account, add公众号 share links, copy generated RSS URLs into `config/article_sources.yaml`.
 - Verified YAML and shell syntax; startup is blocked locally because Docker daemon is not running.
 
+- Started local WeWe RSS successfully after Docker Desktop was opened; service is available at `http://127.0.0.1:4010`.
+- Port `4000` was occupied locally, so the compose mapping was changed to host port `4010` while keeping container port `4000`.
+- Confirmed `curl -I http://127.0.0.1:4010` returns HTTP 200 and container `ai-portfolios-wewe-rss` is running.
+
 ## Decisions
 
 - Use `kimi-k2.6` on `https://ark.cn-beijing.volces.com/api/coding/v3`.
@@ -78,4 +82,4 @@ Continue the existing investment brief project, correcting the product positioni
 
 ## Open questions
 
-- Start Docker Desktop, run `scripts/start_wewe_rss.sh`, add the two WeChat article share links in WeWe RSS, then copy generated RSS URLs into `config/article_sources.yaml`.
+- Open `http://127.0.0.1:4010`, log in with auth code `ai-portfolios`, add the two WeChat article share links in WeWe RSS, then copy generated RSS URLs into `config/article_sources.yaml`.
