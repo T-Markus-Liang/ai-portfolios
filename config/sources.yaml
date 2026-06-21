@@ -1,0 +1,8 @@
+# Nitter 公共实例轮询列表。代码会从上到下尝试，第一个成功的实例就用。
+# 实例可用性变化频繁，可以随时增删。
+nitter_instances:
+  - https://nitter.net
+  - https://nitter.poast.org
+  - https://nitter.privacyredirect.com
+  - https://nitter.tiekoetter.com
+  - https://nitter.space

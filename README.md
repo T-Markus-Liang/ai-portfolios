@@ -4,6 +4,13 @@
 
 详细方案见 [`x_mcp_github_actions_investment_brief_plan.md`](./x_mcp_github_actions_investment_brief_plan.md)。
 
+## 数据源（多源 + 自动降级）
+
+1. **Nitter RSS（首选，免费）**：从 `config/sources.yaml` 中的实例列表逐个尝试，第一个返回真 RSS 的实例就用。
+2. **twitterapi.io（兜底，付费 / 试用 credit）**：Nitter 全失败时自动降级；需要在环境变量里配 `TWITTERAPI_IO_KEY`。
+
+> 公共 Nitter 实例可用性变化频繁（多数实例已加 Anubis / Cloudflare 反爬），多源 + 兜底是必要设计。
+
 ## 抓取策略
 
 - **新关注的账号**（`data/last_seen.json` 里无记录）：回溯过去 7 天的推文。
@@ -18,9 +25,10 @@
 ## 链路
 
 ```
-twitterapi.io (read-only) → Python (增量过滤) → reports/*.md → Discord Webhook
-                                            ↓
-                                   data/last_seen.json (commit 回仓)
+Nitter RSS (主) ─┐
+                 ├─► Python (统一 normalize → 增量过滤) ─► reports/*.md ─► Discord Webhook
+twitterapi.io ───┘                                                ↓
+                                                         data/last_seen.json (commit 回仓)
 ```
 
 ## 本地运行
@@ -30,8 +38,8 @@ twitterapi.io (read-only) → Python (增量过滤) → reports/*.md → Discord
    python3.11 -m venv .venv && source .venv/bin/activate
    pip install -r requirements.txt
    ```
-2. 复制 `.env.example` 为 `.env`，填入 `TWITTERAPI_IO_KEY` 和 `DISCORD_WEBHOOK_URL`。
-3. 验证 key：
+2. 复制 `.env.example` 为 `.env`，至少填 `DISCORD_WEBHOOK_URL`；填了 `TWITTERAPI_IO_KEY` 会自动启用兜底。
+3. 验证 twitterapi.io key（可选）：
    ```bash
    python scripts/ping_twitterapi.py elonmusk
    ```
@@ -44,30 +52,38 @@ twitterapi.io (read-only) → Python (增量过滤) → reports/*.md → Discord
    python scripts/send_discord.py reports/report_YYYYMMDD.md --title "Local Test"
    ```
 
-> macOS 本地若开了 Clash/类似代理（默认 `127.0.0.1:7893`），可能需要 `export HTTPS_PROXY=http://127.0.0.1:7893` 才能直连 `api.twitterapi.io`。GitHub Actions 不需要代理。
+> macOS 本地若开了 Clash 等代理（默认 `127.0.0.1:7893`），可能需要 `export HTTPS_PROXY=http://127.0.0.1:7893` 才能直连。GitHub Actions 不需要代理。
 
 ## GitHub Actions Secrets
 
 仓库 Settings → Secrets and variables → Actions：
 
-- `TWITTERAPI_IO_KEY`
-- `DISCORD_WEBHOOK_URL`
+- `TWITTERAPI_IO_KEY`（可选，仅 Nitter 失败时兜底用）
+- `DISCORD_WEBHOOK_URL`（必需）
 
 ## KOL 配置
 
 编辑 `config/kol_accounts.yaml`，`handle` 字段写真实 X 用户名（不带 `@`）。
-没填 handle 的条目会被跳过。
 
-## twitterapi.io 免费层注意
+## Nitter 实例配置
 
-- QPS：1 次 / 5 秒。代码层面已用 5.5 秒间隔节流并自动重试 429。
-- 单次抓取：新账号 100 条、已追踪账号 40 条；按 5 个 KOL 算每天约 5 次请求，远低于额度。
+编辑 `config/sources.yaml` 的 `nitter_instances`。实例自上而下尝试，第一个返回真 RSS 的就用。当某个实例长期挂掉，把它移到底部或删掉即可。
+
+## twitterapi.io 注意
+
+- 计费：1 USD = 100,000 credits；推文 15 credits/条；最低 15 credits/次（无论是否有数据）。
+- QPS：余额 < 1000 credits 时锁定为 1 req/5s；本项目当前以 Nitter 为主，兜底调用极少。
+- 当前免费试用 credit ~8746 在本项目稳态用量下可作为长期兜底储备。
 
 ## 目录结构
 
 ```
-config/   监控配置（KOL / 关键词 / 股票池）
-src/      主流程（抓取、增量过滤、报告生成）
+config/   监控配置（KOL / Nitter 实例 / 关键词 / 股票池）
+src/      主流程
+  sources/  数据源适配（nitter.py / twitterapi_io.py / types.py）
+  fetch_x_data.py  twitterapi.io 底层 HTTP 封装（含 QPS 节流）
+  state.py        last_seen 持久化
+  main.py         调度入口
 scripts/  小工具（ping、Discord 推送）
 prompts/  LLM prompt（后续阶段）
 data/     last_seen.json + 原始抓取 raw_*.json（raw 被 .gitignore 忽略）
@@ -78,5 +94,5 @@ reports/  生成的 markdown 报告（被 .gitignore 忽略）
 ## 后续路线
 
 - 接入 LLM（OpenAI）做中文总结、情绪打分、分类。
-- 加入关键词搜索（光模块 / 800G / CPO / 算力）+ 个股代码搜索。
+- 加入关键词搜索 + 个股代码关联。
 - 预警规则（高/中/低优先级）。

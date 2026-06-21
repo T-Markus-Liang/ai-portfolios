@@ -1,13 +1,11 @@
-"""Daily incremental brief.
+"""Daily incremental brief with multi-source fetch.
 
-Logic:
-- For each configured handle, look up its last seen tweet id in
-  data/last_seen.json.
-- New handle (no record): fetch ~7 days worth of tweets.
-- Tracked handle: fetch the most recent batch and keep only tweets
-  with id > last_seen_id (incremental).
-- Render markdown report and update last_seen.json so the next run
-  only sees fresh tweets.
+Source order (per handle):
+  1. Nitter RSS (free, no key)  — primary
+  2. twitterapi.io              — fallback if Nitter all fail
+
+Both produce normalized tweets that share id/text/url/createdAt/createdAtTs.
+Incremental window is enforced via data/last_seen.json.
 """
 
 from __future__ import annotations
@@ -37,20 +35,21 @@ STATE_PATH = DATA_DIR / "last_seen.json"
 SH = ZoneInfo("Asia/Shanghai")
 
 NEW_ACCOUNT_LOOKBACK_DAYS = 7
-NEW_ACCOUNT_FETCH_COUNT = 100   # pulled once per new account
-TRACKED_FETCH_COUNT = 40        # enough to cover a daily window
+NEW_ACCOUNT_FETCH_COUNT = 100
+TRACKED_FETCH_COUNT = 40
 
+# Use package-style imports; main is launched via `python -m src.main`.
 if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT))
-    from src.fetch_x_data import (  # type: ignore
-        TwitterAPIError,
-        filter_new_tweets,
-        get_user_last_tweets,
-    )
     from src.state import load_state, save_state, update_handle  # type: ignore
+    from src.sources.nitter import NitterError, fetch_user_rss  # type: ignore
+    from src.sources.twitterapi_io import fetch_user_tweets as fetch_via_tio  # type: ignore
+    from src.fetch_x_data import TwitterAPIError  # type: ignore
 else:
-    from .fetch_x_data import TwitterAPIError, filter_new_tweets, get_user_last_tweets
     from .state import load_state, save_state, update_handle
+    from .sources.nitter import NitterError, fetch_user_rss
+    from .sources.twitterapi_io import fetch_user_tweets as fetch_via_tio
+    from .fetch_x_data import TwitterAPIError
 
 
 def _load_handles() -> list[str]:
@@ -58,25 +57,62 @@ def _load_handles() -> list[str]:
     if not path.exists():
         return []
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    handles: list[str] = []
-    for item in data.get("kol_accounts", []) or []:
-        handle = (item.get("handle") or "").strip()
-        if handle:
-            handles.append(handle)
-    return handles
+    return [
+        (item.get("handle") or "").strip()
+        for item in (data.get("kol_accounts") or [])
+        if (item.get("handle") or "").strip()
+    ]
 
 
-def _parse_created_at(s: str) -> dt.datetime | None:
-    # twitterapi.io style: "Sun Jun 21 06:13:10 +0000 2026"
-    if not s:
+def _load_nitter_instances() -> list[str] | None:
+    path = CONFIG_DIR / "sources.yaml"
+    if not path.exists():
         return None
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    instances = data.get("nitter_instances") or []
+    return [s.strip() for s in instances if isinstance(s, str) and s.strip()] or None
+
+
+def _allow_tio_fallback() -> bool:
+    flag = (os.environ.get("ALLOW_TWITTERAPI_IO_FALLBACK") or "").strip().lower()
+    if flag in {"1", "true", "yes", "on"}:
+        return True
+    # Default: fall back only when the key is configured.
+    return bool(os.environ.get("TWITTERAPI_IO_KEY"))
+
+
+def _id_int(t: dict) -> int:
     try:
-        return dt.datetime.strptime(s, "%a %b %d %H:%M:%S %z %Y")
-    except ValueError:
+        return int(t.get("id") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _filter_incremental(tweets: list[dict], last_id: str | None) -> list[dict]:
+    threshold = 0
+    if last_id:
         try:
-            return dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
+            threshold = int(last_id)
         except ValueError:
-            return None
+            threshold = 0
+    out = [t for t in tweets if _id_int(t) > threshold]
+    out.sort(key=_id_int)
+    return out
+
+
+def _filter_bootstrap(tweets: list[dict], cutoff_utc: dt.datetime) -> list[dict]:
+    cutoff_ts = cutoff_utc.timestamp()
+    out = []
+    for t in tweets:
+        ts = float(t.get("createdAtTs") or 0)
+        if ts == 0.0:
+            # We cannot date-filter when timestamp is missing (e.g. twitterapi.io);
+            # keep all — caller will still cap by source-side `count`.
+            out.append(t)
+        elif ts >= cutoff_ts:
+            out.append(t)
+    out.sort(key=_id_int)
+    return out
 
 
 def _fmt_tweet(t: dict) -> str:
@@ -84,10 +120,38 @@ def _fmt_tweet(t: dict) -> str:
     if len(text) > 260:
         text = text[:260] + "…"
     created = t.get("createdAt", "")
-    url = t.get("url") or t.get("twitterUrl") or ""
-    likes = t.get("likeCount", 0)
-    rts = t.get("retweetCount", 0)
-    return f"  - [{created}] {text}  (♥{likes} / 🔁{rts}) {url}"
+    url = t.get("url") or ""
+    likes = t.get("likeCount") or 0
+    rts = t.get("retweetCount") or 0
+    meta = f"  (♥{likes} / 🔁{rts})" if (likes or rts) else ""
+    return f"  - [{created}] {text}{meta} {url}".rstrip()
+
+
+def _fetch_one_handle(
+    handle: str,
+    nitter_instances: list[str] | None,
+    fetch_count: int,
+    allow_tio: bool,
+) -> tuple[list[dict], str, list[str]]:
+    """Return (tweets, used_source, errors_per_source)."""
+    errors: list[str] = []
+    try:
+        tweets = fetch_user_rss(handle, instances=nitter_instances)
+        if tweets:
+            return tweets[:fetch_count], "nitter", errors
+        errors.append("nitter: empty")
+    except NitterError as exc:
+        errors.append(f"nitter: {exc}")
+
+    if not allow_tio:
+        return [], "none", errors
+
+    try:
+        tweets = fetch_via_tio(handle, count=fetch_count)
+        return tweets, "twitterapi.io", errors
+    except TwitterAPIError as exc:
+        errors.append(f"twitterapi.io: {exc}")
+        return [], "none", errors
 
 
 def _render_markdown(now_sh: dt.datetime, results: list[dict]) -> str:
@@ -96,6 +160,7 @@ def _render_markdown(now_sh: dt.datetime, results: list[dict]) -> str:
         "",
         f"生成时间：{now_sh.strftime('%Y-%m-%d %H:%M')} Asia/Shanghai",
         "窗口：过去 24 小时（新账号回溯 7 天）",
+        "数据源：Nitter RSS 优先，twitterapi.io 兜底",
         "",
         "## KOL 新增推文",
         "",
@@ -105,15 +170,18 @@ def _render_markdown(now_sh: dt.datetime, results: list[dict]) -> str:
         lines.append("- 当前未配置任何 KOL handle，请在 `config/kol_accounts.yaml` 中补充。")
     else:
         for item in results:
-            handle = item.get("handle")
-            if "error" in item:
-                lines.append(f"- @{handle} : 抓取失败 ({item['error']})")
-                continue
+            handle = item["handle"]
+            mode = item["mode"]
             new_tweets = item.get("new_tweets") or []
-            mode = item.get("mode")
-            total_new += len(new_tweets)
+            source = item.get("source") or "none"
+            errors = item.get("errors") or []
             tag = "新账号 / 回溯 7 天" if mode == "bootstrap" else "增量"
-            lines.append(f"- @{handle} : 新增 {len(new_tweets)} 条（{tag}）")
+            if not new_tweets and source == "none":
+                err_summary = "; ".join(errors) or "no data"
+                lines.append(f"- @{handle} : 抓取失败 ({err_summary})")
+                continue
+            total_new += len(new_tweets)
+            lines.append(f"- @{handle} : 新增 {len(new_tweets)} 条（{tag}，来源 {source}）")
             for t in new_tweets:
                 lines.append(_fmt_tweet(t))
     lines += [
@@ -138,41 +206,51 @@ def main() -> int:
     REPORTS_DIR.mkdir(exist_ok=True)
 
     handles = _load_handles()
-    state = load_state(STATE_PATH)
+    nitter_instances = _load_nitter_instances()
+    allow_tio = _allow_tio_fallback()
 
+    state = load_state(STATE_PATH)
     results: list[dict] = []
+
     for handle in handles:
         record = state.get(handle) or {}
         last_id = record.get("last_tweet_id")
         mode = "incremental" if last_id else "bootstrap"
-        count = TRACKED_FETCH_COUNT if last_id else NEW_ACCOUNT_FETCH_COUNT
+        fetch_count = TRACKED_FETCH_COUNT if last_id else NEW_ACCOUNT_FETCH_COUNT
 
-        try:
-            raw = get_user_last_tweets(handle, count=count)
-        except TwitterAPIError as exc:
-            results.append({"handle": handle, "error": str(exc), "mode": mode})
+        tweets, source, errors = _fetch_one_handle(
+            handle, nitter_instances, fetch_count, allow_tio
+        )
+
+        if not tweets:
+            results.append(
+                {"handle": handle, "mode": mode, "new_tweets": [], "source": "none", "errors": errors}
+            )
             continue
 
         if last_id:
-            new_tweets = filter_new_tweets(raw, last_id)
+            new_tweets = _filter_incremental(tweets, last_id)
         else:
-            # bootstrap: keep tweets within last N days
-            new_tweets = []
-            for t in raw:
-                created = _parse_created_at(t.get("createdAt", ""))
-                if created and created >= bootstrap_cutoff:
-                    new_tweets.append(t)
-            new_tweets.sort(key=lambda t: int(t.get("id") or 0))
+            new_tweets = _filter_bootstrap(tweets, bootstrap_cutoff)
 
         if new_tweets:
-            newest_id = str(max(int(t.get("id") or 0) for t in new_tweets))
-            update_handle(state, handle, newest_id, now_sh.isoformat())
-        elif not last_id and raw:
-            # no tweets in window but we did see the account; pin newest id
-            newest_id = str(max(int(t.get("id") or 0) for t in raw))
-            update_handle(state, handle, newest_id, now_sh.isoformat())
+            newest = str(max(_id_int(t) for t in new_tweets))
+            if newest != "0":
+                update_handle(state, handle, newest, now_sh.isoformat())
+        elif not last_id and tweets:
+            newest = str(max(_id_int(t) for t in tweets))
+            if newest != "0":
+                update_handle(state, handle, newest, now_sh.isoformat())
 
-        results.append({"handle": handle, "mode": mode, "new_tweets": new_tweets, "fetched": len(raw)})
+        results.append(
+            {
+                "handle": handle,
+                "mode": mode,
+                "new_tweets": new_tweets,
+                "source": source,
+                "errors": errors,
+            }
+        )
 
     save_state(STATE_PATH, state)
 
