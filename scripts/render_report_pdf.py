@@ -20,6 +20,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     HRFlowable,
@@ -44,10 +45,18 @@ FONT_CANDIDATES = [
 
 
 def _register_font() -> str:
+    try:
+        pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+        return "STSong-Light"
+    except Exception:
+        pass
     for path in FONT_CANDIDATES:
         if Path(path).exists():
-            pdfmetrics.registerFont(TTFont("ReportCJK", path))
-            return "ReportCJK"
+            try:
+                pdfmetrics.registerFont(TTFont("ReportCJK", path))
+                return "ReportCJK"
+            except Exception:
+                continue
     return "Helvetica"
 
 
