@@ -17,7 +17,8 @@ Continue the existing investment brief project by adding LLM summarization using
 - Inspected the current multi-source Nitter/twitterapi.io pipeline.
 - Validated Ark coding endpoint connectivity with model `kimi-k2.6`.
 - Added prompt files and `src/summarize.py`.
-- Started wiring `src/main.py`, workflow env vars, and Discord title output.
+- Wired `src/main.py`, workflow env vars, and Discord title output.
+- Added KOL handles: Rocky (`Rocky_Bitcoin`), Serenity (`aleabitoreddit`), 潘驴邓晓闲缺一 (`JohnsonZ91127`).
 
 ## Decisions
 
@@ -28,15 +29,16 @@ Continue the existing investment brief project by adding LLM summarization using
 ## Current state
 
 - Prompt and summarizer modules exist.
-- Main orchestration is being updated to call the summarizer and emit a richer title.
-- Verification is pending.
+- Main orchestration calls the summarizer and emits a source-aware Discord title.
+- Current KOL config has three real accounts and no `elonmusk` sample account.
+- Verification with network is best done via GitHub Actions because local secrets were shared in chat and should be rotated.
 
 ## Resume instructions
 
 - Read `src/main.py`, `src/summarize.py`, `.github/workflows/market-brief.yml`, and `README.md`.
-- Finish local verification with the current `.env`.
-- Commit the session log status update before final response.
+- Ensure GitHub Secrets include `ARK_API_KEY`, `ARK_BASE_URL`, `ARK_MODEL`, and `DISCORD_WEBHOOK_URL`.
+- Manually trigger `X Market Brief` in GitHub Actions and inspect Discord output.
 
 ## Open questions
 
-- Whether to keep Ark secrets in GitHub as `ARK_API_KEY`, `ARK_BASE_URL`, and `ARK_MODEL` or collapse base/model to defaults only.
+- Remaining requested handles: 华尔街观察Xtrader, 库哥, 李志 | Rational Investing.

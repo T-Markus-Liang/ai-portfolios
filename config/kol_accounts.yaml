@@ -1,22 +1,24 @@
-# 第一批重点 KOL。handle 字段需要补充真实 X 用户名（不含 @）。
-# 没填 handle 的条目会被跳过。
+# 第一批重点 KOL。handle 字段使用真实 X 用户名（不含 @）。
 kol_accounts:
-  - name: elonmusk
-    handle: elonmusk
-    weight: 0.5
-    tags: ["sample"]
-  # - name: Serenity
-  #   handle: ""
-  #   weight: 1.2
-  #   tags: ["AI", "market", "infra"]
+  - name: Rocky
+    handle: Rocky_Bitcoin
+    weight: 1.1
+    tags: ["crypto", "bitcoin", "market"]
+
+  - name: Serenity
+    handle: aleabitoreddit
+    weight: 1.2
+    tags: ["AI", "market", "infra"]
+
+  - name: 潘驴邓晓闲缺一
+    handle: JohnsonZ91127
+    weight: 1.0
+    tags: ["sentiment", "US stocks", "market"]
+
   # - name: 华尔街观察Xtrader
   #   handle: ""
   #   weight: 1.1
   #   tags: ["market", "macro"]
-  # - name: 潘驴邓晓闲缺一
-  #   handle: ""
-  #   weight: 1.0
-  #   tags: ["sentiment"]
   # - name: 库哥
   #   handle: ""
   #   weight: 1.0
