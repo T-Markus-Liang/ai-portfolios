@@ -53,7 +53,7 @@ twitterapi.io ───┘                                                      
    ```bash
    python -m src.main
    ```
-6. 渲染 PDF（可选）：
+6. 渲染 HTML + PDF（可选）：
    ```bash
    python scripts/render_report_pdf.py reports/report_YYYYMMDD.md
    ```

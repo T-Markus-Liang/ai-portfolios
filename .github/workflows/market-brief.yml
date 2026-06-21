@@ -37,6 +37,7 @@ jobs:
           sudo apt-get install -y fonts-noto-cjk
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
 
       - name: Build report
         id: build
@@ -56,8 +57,10 @@ jobs:
         run: |
           pdf_path="${{ steps.build.outputs.report_path }}"
           pdf_path="${pdf_path%.md}.pdf"
-          python scripts/render_report_pdf.py "${{ steps.build.outputs.report_path }}" --output "$pdf_path"
+          html_path="${pdf_path%.pdf}.html"
+          python scripts/render_report_pdf.py "${{ steps.build.outputs.report_path }}" --output "$pdf_path" --html-output "$html_path"
           echo "pdf_path=$pdf_path" >> "$GITHUB_OUTPUT"
+          echo "html_path=$html_path" >> "$GITHUB_OUTPUT"
 
       - name: Send to Discord
         if: ${{ steps.build.outputs.report_path != '' && steps.build.outputs.discord_title != '' }}

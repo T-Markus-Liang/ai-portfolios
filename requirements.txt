@@ -3,3 +3,4 @@ python-dotenv>=1.0
 PyYAML>=6.0
 openai>=2.43.0
 reportlab>=4.2
+playwright>=1.49
