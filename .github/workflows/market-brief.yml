@@ -43,8 +43,8 @@ jobs:
         env:
           TWITTERAPI_IO_KEY: ${{ secrets.TWITTERAPI_IO_KEY }}
           ARK_API_KEY: ${{ secrets.ARK_API_KEY }}
-          ARK_BASE_URL: ${{ secrets.ARK_BASE_URL }}
-          ARK_MODEL: ${{ secrets.ARK_MODEL }}
+          ARK_BASE_URL: ${{ secrets.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/coding/v3' }}
+          ARK_MODEL: ${{ secrets.ARK_MODEL || 'kimi-k2.6' }}
           FORCE_LOOKBACK_DAYS: ${{ github.event.inputs.force_lookback_days || '0' }}
         run: |
           python -m src.main
