@@ -63,6 +63,8 @@ Continue the existing investment brief project, correcting the product positioni
 - Verified local RSS parsing: `投资人六便士` returned 10 articles; `击球区小能手1` feed currently returned 0 articles.
 - Updated `src/main.py` to skip `local_only` article sources when `GITHUB_ACTIONS` is set.
 
+- Updated GitHub Actions schedule to run daily at Beijing 08:00 (`0 0 * * *` UTC).
+
 ## Decisions
 
 - Use `kimi-k2.6` on `https://ark.cn-beijing.volces.com/api/coding/v3`.

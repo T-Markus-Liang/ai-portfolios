@@ -2,8 +2,8 @@ name: 全球投资动能监控
 
 on:
   schedule:
-    # Beijing 07:00 -> UTC 23:00 (previous day)
-    - cron: '0 23 * * *'
+    # Beijing 08:00 -> UTC 00:00
+    - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
       force_lookback_days:
