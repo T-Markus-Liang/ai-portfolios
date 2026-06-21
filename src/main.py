@@ -32,6 +32,7 @@ DATA_DIR = ROOT / "data"
 REPORTS_DIR = ROOT / "reports"
 SUMMARY_DIR = REPORTS_DIR / "summaries"
 STATE_PATH = DATA_DIR / "last_seen.json"
+REPORT_TITLE = "全球投资动能监控"
 
 SH = ZoneInfo("Asia/Shanghai")
 
@@ -162,7 +163,7 @@ def _fetch_one_handle(
 
 def _render_raw_markdown(now_sh: dt.datetime, results: list[dict], llm_error: str | None = None) -> str:
     lines = [
-        "# AI 基建与美股成长股日报（原文模式）" if llm_error else "# AI 基建与美股成长股日报",
+        f"# {REPORT_TITLE}（原文模式）" if llm_error else f"# {REPORT_TITLE}",
         "",
         f"生成时间：{now_sh.strftime('%Y-%m-%d %H:%M')} Asia/Shanghai",
         "窗口：过去 24 小时（新账号回溯 7 天）",
@@ -229,7 +230,7 @@ def _flatten_new_tweets(results: list[dict]) -> list[dict]:
 
 def _build_discord_title(source_counts: dict[str, int], total_new: int, llm_failed: bool) -> str:
     source_summary = " / ".join(f"{key}:{value}" for key, value in sorted(source_counts.items())) or "none"
-    title = f"美股成长股日报 · {source_summary} · {total_new} 新"
+    title = f"{REPORT_TITLE} · {source_summary} · {total_new} 新"
     if llm_failed:
         title += " · llm-failed"
     return title
@@ -265,11 +266,11 @@ def _cn_datetime(now_sh: dt.datetime) -> str:
 
 
 def _report_path(now_sh: dt.datetime) -> Path:
-    return REPORTS_DIR / f"美股成长股日报{_cn_date(now_sh)}.md"
+    return REPORTS_DIR / f"{REPORT_TITLE}{_cn_date(now_sh)}.md"
 
 
 def _summary_archive_path(now_sh: dt.datetime) -> Path:
-    return SUMMARY_DIR / f"{_cn_datetime(now_sh)}美股成长股日报.md"
+    return SUMMARY_DIR / f"{_cn_datetime(now_sh)}{REPORT_TITLE}.md"
 
 
 def _force_lookback_days() -> int:
@@ -290,7 +291,7 @@ def _render_summary_markdown(
 ) -> str:
     source_summary = " / ".join(f"{key}:{value}" for key, value in sorted(source_counts.items())) or "none"
     lines = [
-        "# AI 基建与美股成长股日报",
+        f"# {REPORT_TITLE}",
         "",
         f"生成时间：{now_sh.strftime('%Y-%m-%d %H:%M')} Asia/Shanghai",
         "窗口：过去 24 小时（新账号回溯 7 天）",
@@ -408,7 +409,7 @@ def main() -> int:
     elif total_new == 0:
         md = "\n".join(
             [
-                "# AI 基建与美股成长股日报",
+                f"# {REPORT_TITLE}",
                 "",
                 f"生成时间：{now_sh.strftime('%Y-%m-%d %H:%M')} Asia/Shanghai",
                 "窗口：过去 24 小时（新账号回溯 7 天）",

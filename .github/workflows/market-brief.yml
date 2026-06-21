@@ -1,4 +1,4 @@
-name: X Market Brief
+name: 全球投资动能监控
 
 on:
   schedule:
@@ -98,7 +98,7 @@ jobs:
       - name: Upload report artifact
         uses: actions/upload-artifact@v5
         with:
-          name: market-brief-report
+          name: global-momentum-report
           path: |
             reports/
             data/raw_*.json
