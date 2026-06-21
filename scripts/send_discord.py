@@ -1,15 +1,16 @@
-"""Send a markdown report to a Discord channel via webhook.
+"""Send a report file to a Discord channel via webhook.
 
 Usage:
-    python scripts/send_discord.py <path-to-markdown-file> [--title "..."]
+    python scripts/send_discord.py <path-to-report-file> [--title "..."]
 
-If the content exceeds Discord's 2000-char limit, the file is uploaded
-as an attachment instead.
+Markdown files under the content limit are sent inline. Longer markdown,
+PDFs, and other files are uploaded as attachments.
 """
 
 from __future__ import annotations
 
 import argparse
+import mimetypes
 import os
 import sys
 from pathlib import Path
@@ -27,20 +28,27 @@ DISCORD_CONTENT_LIMIT = 1900  # leave headroom for code fences
 
 
 def send(webhook: str, file_path: Path, title: str | None) -> int:
-    text = file_path.read_text(encoding="utf-8")
     header = f"**{title}**\n" if title else ""
+    mime = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
 
-    if len(text) + len(header) <= DISCORD_CONTENT_LIMIT:
+    if file_path.suffix.lower() in {".md", ".txt"}:
+        text = file_path.read_text(encoding="utf-8")
+    else:
+        text = ""
+
+    if text and len(text) + len(header) <= DISCORD_CONTENT_LIMIT:
         resp = requests.post(
             webhook,
             json={"content": header + text},
             timeout=30,
         )
     else:
+        size = file_path.stat().st_size
+        content = header + f"(report attached, {file_path.name}, {size} bytes)"
         resp = requests.post(
             webhook,
-            data={"content": header + f"(report attached, {len(text)} chars)"},
-            files={"file": (file_path.name, text.encode("utf-8"), "text/markdown")},
+            data={"content": content},
+            files={"file": (file_path.name, file_path.read_bytes(), mime)},
             timeout=60,
         )
 
@@ -53,7 +61,7 @@ def send(webhook: str, file_path: Path, title: str | None) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("path", help="markdown file to send")
+    parser.add_argument("path", help="report file to send")
     parser.add_argument("--title", default=None)
     args = parser.parse_args()
 

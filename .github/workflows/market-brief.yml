@@ -33,6 +33,8 @@ jobs:
 
       - name: Install deps
         run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
@@ -47,12 +49,21 @@ jobs:
         run: |
           python -m src.main
 
+      - name: Render PDF
+        id: pdf
+        if: ${{ steps.build.outputs.report_path != '' }}
+        run: |
+          pdf_path="${{ steps.build.outputs.report_path }}"
+          pdf_path="${pdf_path%.md}.pdf"
+          python scripts/render_report_pdf.py "${{ steps.build.outputs.report_path }}" --output "$pdf_path"
+          echo "pdf_path=$pdf_path" >> "$GITHUB_OUTPUT"
+
       - name: Send to Discord
-        if: ${{ steps.build.outputs.report_path != '' && steps.build.outputs.discord_title != '' }}
+        if: ${{ steps.pdf.outputs.pdf_path != '' && steps.build.outputs.discord_title != '' }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          python scripts/send_discord.py "${{ steps.build.outputs.report_path }}" \
+          python scripts/send_discord.py "${{ steps.pdf.outputs.pdf_path }}" \
             --title "${{ steps.build.outputs.discord_title }}"
 
       - name: Persist last_seen.json

@@ -28,9 +28,9 @@
 
 ```
 Nitter RSS (主) ─┐
-                 ├─► Python (统一 normalize → 增量过滤) ─► reports/*.md ─► Discord Webhook
-twitterapi.io ───┘                                                ↓
-                                                         data/last_seen.json (commit 回仓)
+                 ├─► Python (normalize → 增量过滤 → LLM 总结) ─► reports/*.md ─► reports/*.pdf ─► Discord
+twitterapi.io ───┘                                                              ↓
+                                                                     data/last_seen.json (commit 回仓)
 ```
 
 ## 本地运行
@@ -53,9 +53,13 @@ twitterapi.io ───┘                                                ↓
    ```bash
    python -m src.main
    ```
-6. 推送到 Discord（可选）：
+6. 渲染 PDF（可选）：
    ```bash
-   python scripts/send_discord.py reports/report_YYYYMMDD.md --title "Local Test"
+   python scripts/render_report_pdf.py reports/report_YYYYMMDD.md
+   ```
+7. 推送到 Discord（可选）：
+   ```bash
+   python scripts/send_discord.py reports/report_YYYYMMDD.pdf --title "Local Test"
    ```
 
 > macOS 本地若开了 Clash 等代理（默认 `127.0.0.1:7893`），可能需要 `export HTTPS_PROXY=http://127.0.0.1:7893` 才能直连。GitHub Actions 不需要代理。
