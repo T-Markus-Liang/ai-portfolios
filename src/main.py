@@ -33,7 +33,7 @@ REPORTS_DIR = ROOT / "reports"
 SUMMARY_DIR = REPORTS_DIR / "summaries"
 STATE_PATH = DATA_DIR / "last_seen.json"
 REPORT_TITLE = "全球投资动能监控"
-WECHAT_GROUP_SUMMARY_DIR = DATA_DIR / "wechat_groups" / "summaries"
+WECHAT_GROUP_ARCHIVE_DIR = DATA_DIR / "wechat_groups" / "archives"
 
 SH = ZoneInfo("Asia/Shanghai")
 
@@ -48,7 +48,7 @@ if __package__ in (None, ""):
     from src.sources.nitter import NitterError, fetch_user_rss  # type: ignore
     from src.sources.rss_articles import build_manual_articles, fetch_articles  # type: ignore
     from src.sources.twitterapi_io import fetch_user_tweets as fetch_via_tio  # type: ignore
-    from src.sources.wechat_groups import load_wechat_group_summaries  # type: ignore
+    from src.sources.wechat_groups import load_wechat_group_archives  # type: ignore
     from src.fetch_x_data import TwitterAPIError  # type: ignore
     from src.summarize import LLMError, summarize  # type: ignore
 else:
@@ -56,7 +56,7 @@ else:
     from .sources.nitter import NitterError, fetch_user_rss
     from .sources.rss_articles import build_manual_articles, fetch_articles
     from .sources.twitterapi_io import fetch_user_tweets as fetch_via_tio
-    from .sources.wechat_groups import load_wechat_group_summaries
+    from .sources.wechat_groups import load_wechat_group_archives
     from .fetch_x_data import TwitterAPIError
     from .summarize import LLMError, summarize
 
@@ -266,25 +266,25 @@ def _fetch_article_sources(sources: list[dict], state: dict, cutoff_utc: dt.date
     return results
 
 
-def _fetch_wechat_group_summaries(state: dict, cutoff_utc: dt.datetime, now_iso: str, force_days: int) -> list[dict]:
+def _fetch_wechat_group_archives(state: dict, cutoff_utc: dt.datetime, now_iso: str, force_days: int) -> list[dict]:
     if not _wechat_groups_enabled():
         return []
-    summaries = load_wechat_group_summaries(WECHAT_GROUP_SUMMARY_DIR)
-    if not summaries:
+    archives = load_wechat_group_archives(WECHAT_GROUP_ARCHIVE_DIR)
+    if not archives:
         return []
-    source_id = "wechat_group:summaries"
+    source_id = "wechat_group:archives"
     last_id = None if force_days else (state.get(source_id) or {}).get("last_tweet_id")
-    new_summaries = _filter_articles(summaries, last_id, cutoff_utc)
-    if not force_days and summaries:
-        newest = str(max(summaries, key=_item_sort_key).get("id") or "")
+    new_archives = _filter_articles(archives, last_id, cutoff_utc)
+    if not force_days and archives:
+        newest = str(max(archives, key=_item_sort_key).get("id") or "")
         if newest:
             update_handle(state, source_id, newest, now_iso)
     return [
         {
-            "name": "微信投资群摘要",
+            "name": "微信投资群原文",
             "handle": source_id,
             "mode": "article_rss",
-            "new_tweets": new_summaries,
+            "new_tweets": new_archives,
             "source": "wechat_group:local",
             "errors": [],
         }
@@ -520,7 +520,7 @@ def main() -> int:
         )
 
     results.extend(_fetch_article_sources(article_sources, state, bootstrap_cutoff, now_sh.isoformat(), force_days))
-    results.extend(_fetch_wechat_group_summaries(state, bootstrap_cutoff, now_sh.isoformat(), force_days))
+    results.extend(_fetch_wechat_group_archives(state, bootstrap_cutoff, now_sh.isoformat(), force_days))
 
     if not force_days:
         save_state(STATE_PATH, state)

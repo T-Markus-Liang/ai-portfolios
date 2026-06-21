@@ -18,10 +18,10 @@ if [[ "${NO_GIT:-0}" == "1" ]]; then
   exit 0
 fi
 
-git add data/wechat_groups/summaries/
+git add data/wechat_groups/archives/
 if ! git diff --cached --quiet; then
-  git commit -m "chore(wechat): sync group summary [skip ci]"
+  git commit -m "chore(wechat): sync group raw archive [skip ci]"
   git push origin main
 else
-  echo "[OK] no group summary changes to commit"
+  echo "[OK] no group archive changes to commit"
 fi

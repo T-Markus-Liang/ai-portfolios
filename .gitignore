@@ -39,5 +39,5 @@ docker/wewe-rss/data/
 data/wechat_groups/inbox/
 data/wechat_groups/processed/
 !data/wechat_groups/
-!data/wechat_groups/summaries/
-!data/wechat_groups/summaries/**
+!data/wechat_groups/archives/
+!data/wechat_groups/archives/**

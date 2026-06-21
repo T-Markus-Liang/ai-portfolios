@@ -1,43 +1,26 @@
-"""Convert local WeChat group inbox messages into report-ready summaries."""
+"""Archive local WeChat group inbox messages as raw report inputs."""
 
 from __future__ import annotations
 
 import datetime as dt
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-try:
-    from openai import OpenAI
-except ImportError:  # pragma: no cover
-    OpenAI = None  # type: ignore[assignment]
-
-try:
-    from dotenv import load_dotenv
-except ImportError:  # pragma: no cover
-    load_dotenv = None  # type: ignore[assignment]
-
 ROOT = Path(__file__).resolve().parent.parent
 INBOX_DIR = ROOT / "data" / "wechat_groups" / "inbox"
 PROCESSED_DIR = ROOT / "data" / "wechat_groups" / "processed"
-SUMMARY_DIR = ROOT / "data" / "wechat_groups" / "summaries"
+ARCHIVE_DIR = ROOT / "data" / "wechat_groups" / "archives"
 INDEX_JSON = PROCESSED_DIR / "index.json"
 INDEX_MD = PROCESSED_DIR / "index.md"
 SH = ZoneInfo("Asia/Shanghai")
 
 KEYWORDS = [
-    "AI", "算力", "存储", "半导体", "光模块", "机器人", "新能源", "港股", "A股", "美股",
+    "AI", "算力", "存储", "DRAM", "HBM", "半导体", "光模块", "机器人", "新能源", "港股", "A股", "美股",
     "加仓", "减仓", "买入", "卖出", "调研", "订单", "业绩", "估值", "风险", "流动性",
 ]
-
-DEFAULT_BASE_URL = "https://ark.cn-beijing.volces.com/api/coding/v3"
-DEFAULT_MODEL = "kimi-k2.6"
-
-if load_dotenv is not None:
-    load_dotenv(ROOT / ".env")
 
 
 def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
@@ -55,7 +38,8 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
 
 
 def _extract_keywords(text: str) -> list[str]:
-    return [kw for kw in KEYWORDS if kw.lower() in text.lower()]
+    lowered = text.lower()
+    return [kw for kw in KEYWORDS if kw.lower() in lowered]
 
 
 def _extract_tickers(text: str) -> list[str]:
@@ -99,133 +83,72 @@ def _write_index(records: list[dict[str, Any]]) -> None:
     INDEX_MD.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _today_records(records: list[dict[str, Any]], now: dt.datetime) -> list[dict[str, Any]]:
-    today = now.date()
-    out = []
-    for item in records:
-        imported_at = item.get("importedAt") or ""
-        try:
-            item_date = dt.datetime.fromisoformat(imported_at).date()
-        except ValueError:
-            item_date = today
-        if item_date == today:
-            out.append(item)
-    return out
-
-
-def _fallback_summary(records: list[dict[str, Any]], now: dt.datetime) -> str:
-    groups = _dedupe([item["group"] for item in records])
-    keywords = _dedupe([kw for item in records for kw in item["keywords"]])
-    tickers = _dedupe([ticker for item in records for ticker in item["tickers"]])
-    lines = [
-        "# 微信投资群情报摘要",
-        "",
-        f"- 群组：{', '.join(groups) or '无'}",
-        f"- 消息批次：{len(records)}",
-        f"- 关键词：{', '.join(keywords) or '无'}",
-        f"- 股票/代码线索：{', '.join(tickers) or '无'}",
-        "",
-        "## 可用于日报的结构化素材",
-        "",
-        "当前环境未启用群聊 LLM 摘要，以下为规则提取的消息要点，供主日报模型二次整合。",
-        "",
-        "## 消息摘录",
-        "",
-    ]
-    for item in records[:30]:
-        tags = ", ".join(_dedupe(item["keywords"] + item["tickers"]))
-        lines.append(f"- {item['importedAt']}｜{item['group']}｜{tags}｜{item['preview']}")
-    lines += [
-        "",
-        "## 使用边界",
-        "",
-        "- 群聊内容是投资线索，不是交易结论；需结合公开信息、价格行为和基本面验证。",
-        f"- 生成时间：{now.isoformat()}",
-        "",
-    ]
-    return "\n".join(lines)
-
-
-def _llm_summary(records: list[dict[str, Any]], now: dt.datetime) -> str | None:
-    if OpenAI is None:
-        return None
-    api_key = os.environ.get("ARK_API_KEY", "").strip()
-    if not api_key:
-        return None
-    base_url = (os.environ.get("ARK_BASE_URL") or DEFAULT_BASE_URL).strip()
-    model = (os.environ.get("ARK_MODEL") or DEFAULT_MODEL).strip()
-    payload = [
-        {
-            "group": item["group"],
-            "importedAt": item["importedAt"],
-            "keywords": item["keywords"],
-            "tickers": item["tickers"],
-            "text": item["body"][:1600],
-        }
-        for item in records[:40]
-    ]
-    prompt = (
-        "你是买方研究助理。请把以下微信群投资讨论整理成可并入《全球投资动能监控》的中文 Markdown 素材。"
-        "要求：1）不要使用代码围栏；2）只输出结构化摘要，不逐字转录；3）控制在 700 字以内；"
-        "4）必须包含：最大公约数、A股/港股/中概映射、证据链摘录、待验证问题；"
-        "5）不要给确定性交易指令。\n\n"
-        f"生成时间：{now.isoformat()}\n"
-        f"群聊素材 JSON：{json.dumps(payload, ensure_ascii=False)}"
-    )
-    client = OpenAI(api_key=api_key, base_url=base_url)
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": "你擅长把非公开投研讨论整理为审慎、可验证的投资情报。"},
-            {"role": "user", "content": prompt},
-        ],
-        max_tokens=1200,
-        temperature=0.2,
-    )
-    content = (response.choices[0].message.content or "").strip()
-    if content.startswith("```"):
-        content = re.sub(r"^```(?:markdown)?\s*", "", content)
-        content = re.sub(r"\s*```$", "", content).strip()
-    return content or None
-
-
-def _write_daily_summary(records: list[dict[str, Any]], now: dt.datetime) -> Path | None:
-    SUMMARY_DIR.mkdir(parents=True, exist_ok=True)
-    todays_records = _today_records(records, now)
-    if not todays_records:
-        return None
+def _record_date(item: dict[str, Any], now: dt.datetime) -> dt.date:
+    imported_at = item.get("importedAt") or ""
     try:
-        summary = _llm_summary(todays_records, now)
-    except Exception as exc:
-        print(f"[WARN] group LLM summary failed: {type(exc).__name__}: {exc}")
-        summary = None
-    summary = summary or _fallback_summary(todays_records, now)
-    path = SUMMARY_DIR / f"{now.strftime('%Y-%m-%d')}_微信投资群情报摘要.md"
-    front_matter = "\n".join(
-        [
+        return dt.datetime.fromisoformat(imported_at).date()
+    except ValueError:
+        return now.date()
+
+
+def _write_daily_archive(records: list[dict[str, Any]], now: dt.datetime) -> list[Path]:
+    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    by_date: dict[dt.date, list[dict[str, Any]]] = {}
+    for item in records:
+        by_date.setdefault(_record_date(item, now), []).append(item)
+
+    paths: list[Path] = []
+    for day, items in sorted(by_date.items()):
+        groups = _dedupe([item["group"] for item in items])
+        keywords = _dedupe([kw for item in items for kw in item["keywords"]])
+        tickers = _dedupe([ticker for item in items for ticker in item["tickers"]])
+        path = ARCHIVE_DIR / f"{day.isoformat()}_微信群原文归档.md"
+        lines = [
             "---",
-            f"date: {now.date().isoformat()}",
+            f"date: {day.isoformat()}",
             f"generated_at: {now.isoformat()}",
-            'title: "微信投资群情报摘要"',
-            f"message_batches: {len(todays_records)}",
+            'title: "微信群原文归档"',
+            f"message_batches: {len(items)}",
+            f"groups: \"{', '.join(groups)}\"",
             "---",
             "",
+            "# 微信群原文归档",
+            "",
+            f"- 日期：{day.isoformat()}",
+            f"- 群组：{', '.join(groups)}",
+            f"- 消息批次：{len(items)}",
+            f"- 关键词：{', '.join(keywords) or '无'}",
+            f"- 股票/代码线索：{', '.join(tickers) or '无'}",
+            "",
+            "## 原文",
+            "",
         ]
-    )
-    path.write_text(front_matter + summary.strip() + "\n", encoding="utf-8")
-    return path
+        for index, item in enumerate(items, start=1):
+            lines += [
+                f"### 消息批次 {index}",
+                "",
+                f"- 群组：{item['group']}",
+                f"- 导入时间：{item['importedAt']}",
+                f"- 关键词：{', '.join(_dedupe(item['keywords'] + item['tickers'])) or '无'}",
+                "",
+                item["body"].strip(),
+                "",
+            ]
+        path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+        paths.append(path)
+    return paths
 
 
 def main() -> int:
     now = dt.datetime.now(SH)
     records = _load_records()
     _write_index(records)
-    summary_path = _write_daily_summary(records, now)
+    archive_paths = _write_daily_archive(records, now)
     print(f"[OK] processed group messages: {len(records)}")
-    if summary_path:
-        print(f"[OK] summary -> {summary_path}")
-    else:
-        print("[OK] summary skipped: no messages imported today")
+    for path in archive_paths:
+        print(f"[OK] archive -> {path}")
+    if not archive_paths:
+        print("[OK] archive skipped: no inbox messages")
     return 0
 
 

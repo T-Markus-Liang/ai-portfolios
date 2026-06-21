@@ -1,4 +1,4 @@
-"""Local WeChat group summary source."""
+"""Local WeChat group raw archive source."""
 
 from __future__ import annotations
 
@@ -44,11 +44,11 @@ def _title_from_body(body: str, fallback: str) -> str:
     return fallback
 
 
-def load_wechat_group_summaries(summary_dir: Path) -> list[dict]:
-    if not summary_dir.exists():
+def load_wechat_group_archives(archive_dir: Path) -> list[dict]:
+    if not archive_dir.exists():
         return []
     articles: list[dict] = []
-    for path in sorted(summary_dir.glob("*.md")):
+    for path in sorted(archive_dir.glob("*.md")):
         text = path.read_text(encoding="utf-8")
         meta, body = _parse_frontmatter(text)
         if not body:
@@ -64,9 +64,13 @@ def load_wechat_group_summaries(summary_dir: Path) -> list[dict]:
                 "createdAt": created,
                 "createdAtTs": _parse_ts(created),
                 "source": "local:wechat_group",
-                "contentType": "wechat_group_summary",
+                "contentType": "wechat_group_archive",
                 "sourceName": "微信投资群",
                 "title": title,
             }
         )
     return articles
+
+
+def load_wechat_group_summaries(summary_dir: Path) -> list[dict]:
+    return load_wechat_group_archives(summary_dir)

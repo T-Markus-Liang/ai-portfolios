@@ -5,5 +5,5 @@ wechat_groups:
     enabled: true
     include_in_report: true
     tags: ["投资群", "AI", "调研", "操作建议"]
-    sync_raw_to_git: false
-    sync_summary_to_git: true
+    sync_raw_to_git: true
+    sync_summary_to_git: false

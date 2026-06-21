@@ -73,9 +73,9 @@ Continue the existing investment brief project, correcting the product positioni
 
 - Added safe Mac WeChat group ingestion for `🈲言-2六便士AI吟诗`: UI/clipboard capture only, no database decryption or Hook path.
 - Added `config/wechat_groups.yaml`, `scripts/capture_wechat_group_visible.py`, `scripts/import_wechat_group_clipboard.py`, `scripts/process_wechat_group_inbox.py`, and `scripts/run_wechat_group_sync.sh`.
-- Added `src/sources/wechat_groups.py` and wired `src/main.py` so committed daily group summaries under `data/wechat_groups/summaries/` become a report source named `微信投资群摘要`.
-- Updated `.gitignore` so raw inbox and local processed previews stay local, while LLM/structured daily summaries can be committed to GitHub.
-- Created Codex local automation `微信群投资情报本地同步` (`automation-2`) at Beijing 08:20, 12:20, 18:20, 22:20 to run the group sync script and push summary updates.
+- Added `src/sources/wechat_groups.py` and wired `src/main.py` so committed daily group archives under `data/wechat_groups/archives/` become a report source named `微信投资群原文`.
+- Updated `.gitignore` so raw inbox and local processed previews stay local, while daily raw archives can be committed to GitHub.
+- Created Codex local automation `微信群投资情报本地同步` (`automation-2`) at Beijing 08:20, 12:20, 18:20, 22:20 to run the group sync script and push raw archive updates.
 - Verified Python compilation and simulated summary ingestion; removed simulated raw and summary data before committing.
 - Direct UI capture test is blocked until macOS grants Accessibility permission to Terminal/Codex/osascript.
 
@@ -90,6 +90,14 @@ Continue the existing investment brief project, correcting the product positioni
 - Investigated macOS Accessibility issue: Terminal, Codex, and Codex Computer Use are enabled, but `/usr/bin/osascript` remains hidden in System Settings and cannot directly control WeChat via System Events.
 - Added a visible helper app `tools/WeChatGroupCapture.app` plus source `tools/WeChatGroupCapture.applescript` so the user can grant Accessibility permission to a named local app instead of invisible `osascript`.
 - Updated `scripts/capture_wechat_group_visible.py` to prefer the helper app and use a sentinel clipboard value to avoid false failures when the clipboard already contains WeChat content.
+
+
+- User clarified WeChat group sync should copy raw group messages to GitHub and should not run local LLM summarization; the daily report LLM will handle all cross-source synthesis later.
+- Reworked WeChat group pipeline from `summaries/` to `archives/`: `scripts/process_wechat_group_inbox.py` now writes raw daily Markdown archives with front matter, keywords, and original message text.
+- Updated `src/sources/wechat_groups.py` and `src/main.py` to read `data/wechat_groups/archives/` as `微信投资群原文` with content type `wechat_group_archive`.
+- Updated `scripts/run_wechat_group_sync.sh`, `.gitignore`, `README.md`, `config/wechat_groups.yaml`, and Codex automation `automation-2` to commit raw archives and avoid local LLM summaries.
+- Imported the user-provided recent group messages into `data/wechat_groups/archives/2026-06-22_微信群原文归档.md`; removed the old generated summary file from Git tracking.
+- Verified `FORCE_LOOKBACK_DAYS=1 .venv/bin/python -m src.main` sees one `wechat_group_archive` item from `微信投资群原文` with 2542 characters.
 
 ## Decisions
 
