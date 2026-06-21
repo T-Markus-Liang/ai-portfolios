@@ -17,7 +17,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          # we push back last_seen.json; need a real token, not GITHUB_TOKEN restricted to no-push
           persist-credentials: true
           fetch-depth: 0
 
@@ -36,16 +35,19 @@ jobs:
         id: build
         env:
           TWITTERAPI_IO_KEY: ${{ secrets.TWITTERAPI_IO_KEY }}
+          ARK_API_KEY: ${{ secrets.ARK_API_KEY }}
+          ARK_BASE_URL: ${{ secrets.ARK_BASE_URL }}
+          ARK_MODEL: ${{ secrets.ARK_MODEL }}
         run: |
           python -m src.main
 
       - name: Send to Discord
-        if: ${{ steps.build.outputs.report_path != '' }}
+        if: ${{ steps.build.outputs.report_path != '' && steps.build.outputs.discord_title != '' }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           python scripts/send_discord.py "${{ steps.build.outputs.report_path }}" \
-            --title "Market Brief 日报"
+            --title "${{ steps.build.outputs.discord_title }}"
 
       - name: Persist last_seen.json
         if: always()

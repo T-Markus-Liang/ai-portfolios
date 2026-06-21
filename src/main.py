@@ -1,4 +1,4 @@
-"""Daily incremental brief with multi-source fetch.
+"""Daily incremental brief with multi-source fetch + optional LLM summary.
 
 Source order (per handle):
   1. Nitter RSS (free, no key)  — primary
@@ -45,11 +45,13 @@ if __package__ in (None, ""):
     from src.sources.nitter import NitterError, fetch_user_rss  # type: ignore
     from src.sources.twitterapi_io import fetch_user_tweets as fetch_via_tio  # type: ignore
     from src.fetch_x_data import TwitterAPIError  # type: ignore
+    from src.summarize import LLMError, summarize  # type: ignore
 else:
     from .state import load_state, save_state, update_handle
     from .sources.nitter import NitterError, fetch_user_rss
     from .sources.twitterapi_io import fetch_user_tweets as fetch_via_tio
     from .fetch_x_data import TwitterAPIError
+    from .summarize import LLMError, summarize
 
 
 def _load_handles() -> list[str]:
@@ -127,6 +129,14 @@ def _fmt_tweet(t: dict) -> str:
     return f"  - [{created}] {text}{meta} {url}".rstrip()
 
 
+def _fmt_tweet_link(t: dict) -> str:
+    text = (t.get("text") or "").replace("\n", " ").strip()
+    if len(text) > 140:
+        text = text[:140] + "…"
+    url = t.get("url") or ""
+    return f"- {text} — {url}"
+
+
 def _fetch_one_handle(
     handle: str,
     nitter_instances: list[str] | None,
@@ -154,14 +164,18 @@ def _fetch_one_handle(
         return [], "none", errors
 
 
-def _render_markdown(now_sh: dt.datetime, results: list[dict]) -> str:
+def _render_raw_markdown(now_sh: dt.datetime, results: list[dict], llm_error: str | None = None) -> str:
     lines = [
-        "# AI 基建与美股成长股日报",
+        "# AI 基建与美股成长股日报（原文模式）" if llm_error else "# AI 基建与美股成长股日报",
         "",
         f"生成时间：{now_sh.strftime('%Y-%m-%d %H:%M')} Asia/Shanghai",
         "窗口：过去 24 小时（新账号回溯 7 天）",
         "数据源：Nitter RSS 优先，twitterapi.io 兜底",
         "",
+    ]
+    if llm_error:
+        lines += [f"> ⚠️ LLM 调用失败，退回原文模式：{llm_error}", ""]
+    lines += [
         "## KOL 新增推文",
         "",
     ]
@@ -188,12 +202,71 @@ def _render_markdown(now_sh: dt.datetime, results: list[dict]) -> str:
         "",
         f"合计新增：{total_new} 条。",
         "",
-        "## 备注",
+    ]
+    return "\n".join(lines)
+
+
+def _source_counts(results: list[dict]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in results:
+        source = item.get("source") or "none"
+        if item.get("new_tweets"):
+            counts[source] = counts.get(source, 0) + 1
+    return counts
+
+
+def _flatten_new_tweets(results: list[dict]) -> list[dict]:
+    flat: list[dict] = []
+    for item in results:
+        handle = item["handle"]
+        for tweet in item.get("new_tweets") or []:
+            enriched = dict(tweet)
+            enriched["kol"] = handle
+            flat.append(enriched)
+    return flat
+
+
+def _build_discord_title(source_counts: dict[str, int], total_new: int, llm_failed: bool) -> str:
+    source_summary = " / ".join(f"{key}:{value}" for key, value in sorted(source_counts.items())) or "none"
+    title = f"Market Brief · {source_summary} · {total_new} 新"
+    if llm_failed:
+        title += " · llm-failed"
+    return title
+
+
+def _render_summary_markdown(
+    now_sh: dt.datetime,
+    summary_md: str,
+    results: list[dict],
+    source_counts: dict[str, int],
+    total_new: int,
+) -> str:
+    source_summary = " / ".join(f"{key}:{value}" for key, value in sorted(source_counts.items())) or "none"
+    lines = [
+        "# AI 基建与美股成长股日报",
         "",
-        "- 链路打通版本，尚未接入 LLM 总结。",
-        "- 下一阶段：去重已通过 last_seen 完成，将加入分类、情绪、个股关联、预警与中文总结。",
+        f"生成时间：{now_sh.strftime('%Y-%m-%d %H:%M')} Asia/Shanghai",
+        "窗口：过去 24 小时（新账号回溯 7 天）",
+        f"数据源：{source_summary}",
+        f"新增推文：{total_new} 条",
+        f"模型：{(os.environ.get('ARK_MODEL') or 'kimi-k2.6').strip()}",
+        "",
+        summary_md.strip(),
+        "",
+        "## 附：原始推文链接",
         "",
     ]
+    for item in results:
+        new_tweets = item.get("new_tweets") or []
+        if not new_tweets:
+            continue
+        lines.append(f"<details><summary>@{item['handle']}（{len(new_tweets)} 条）</summary>")
+        lines.append("")
+        for tweet in new_tweets[:20]:
+            lines.append(_fmt_tweet_link(tweet))
+        lines.append("")
+        lines.append("</details>")
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -256,8 +329,38 @@ def main() -> int:
 
     raw_path = DATA_DIR / f"raw_{now_sh.strftime('%Y%m%d_%H%M')}.json"
     raw_path.write_text(json.dumps(results, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    source_counts = _source_counts(results)
+    flat_new_tweets = _flatten_new_tweets(results)
+    total_new = len(flat_new_tweets)
+    llm_failed = False
+    llm_error = ""
+    summary_md = ""
 
-    md = _render_markdown(now_sh, results)
+    if flat_new_tweets:
+        try:
+            summary_md = summarize(flat_new_tweets)
+        except LLMError as exc:
+            llm_failed = True
+            llm_error = str(exc)
+
+    if summary_md:
+        md = _render_summary_markdown(now_sh, summary_md, results, source_counts, total_new)
+    elif total_new == 0:
+        md = "\n".join(
+            [
+                "# AI 基建与美股成长股日报",
+                "",
+                f"生成时间：{now_sh.strftime('%Y-%m-%d %H:%M')} Asia/Shanghai",
+                "窗口：过去 24 小时（新账号回溯 7 天）",
+                f"数据源：{' / '.join(f'{k}:{v}' for k, v in sorted(source_counts.items())) or 'none'}",
+                "",
+                "今日所有追踪 KOL 均无新增推文，跳过 LLM 总结。",
+                "",
+            ]
+        )
+    else:
+        md = _render_raw_markdown(now_sh, results, llm_error)
+
     report_path = REPORTS_DIR / f"report_{now_sh.strftime('%Y%m%d')}.md"
     report_path.write_text(md, encoding="utf-8")
 
@@ -265,6 +368,9 @@ def main() -> int:
     if gh_out:
         with open(gh_out, "a", encoding="utf-8") as fh:
             fh.write(f"report_path={report_path.as_posix()}\n")
+            fh.write(
+                f"discord_title={_build_discord_title(source_counts, total_new, llm_failed)}\n"
+            )
 
     print(f"[OK] report -> {report_path}")
     print(f"[OK] raw    -> {raw_path}")

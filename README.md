@@ -8,6 +8,7 @@
 
 1. **Nitter RSS（首选，免费）**：从 `config/sources.yaml` 中的实例列表逐个尝试，第一个返回真 RSS 的实例就用。
 2. **twitterapi.io（兜底，付费 / 试用 credit）**：Nitter 全失败时自动降级；需要在环境变量里配 `TWITTERAPI_IO_KEY`。
+3. **Volcengine Ark LLM（总结层）**：若配置了 `ARK_API_KEY`，会把当天新增推文总结成中文简报；失败时自动退回原文模式。
 
 > 公共 Nitter 实例可用性变化频繁（多数实例已加 Anubis / Cloudflare 反爬），多源 + 兜底是必要设计。
 
@@ -39,15 +40,19 @@ twitterapi.io ───┘                                                ↓
    pip install -r requirements.txt
    ```
 2. 复制 `.env.example` 为 `.env`，至少填 `DISCORD_WEBHOOK_URL`；填了 `TWITTERAPI_IO_KEY` 会自动启用兜底。
-3. 验证 twitterapi.io key（可选）：
+3. 如需中文总结，再填：
+   - `ARK_API_KEY`
+   - `ARK_BASE_URL`（默认 `https://ark.cn-beijing.volces.com/api/coding/v3`）
+   - `ARK_MODEL`（当前验证通过 `kimi-k2.6`）
+4. 验证 twitterapi.io key（可选）：
    ```bash
    python scripts/ping_twitterapi.py elonmusk
    ```
-4. 生成日报：
+5. 生成日报：
    ```bash
    python -m src.main
    ```
-5. 推送到 Discord（可选）：
+6. 推送到 Discord（可选）：
    ```bash
    python scripts/send_discord.py reports/report_YYYYMMDD.md --title "Local Test"
    ```
@@ -55,11 +60,18 @@ twitterapi.io ───┘                                                ↓
 > macOS 本地若开了 Clash 等代理（默认 `127.0.0.1:7893`），可能需要 `export HTTPS_PROXY=http://127.0.0.1:7893` 才能直连。GitHub Actions 不需要代理。
 
 ## GitHub Actions Secrets
+- `ARK_API_KEY`（必需）：火山方舟 API Key
+- `ARK_BASE_URL`（可选）：方舟接口地址，默认 `https://ark.cn-beijing.volces.com/api/coding/v3`
+- `ARK_MODEL`（可选）：模型名或推理接入点 ID，默认 `kimi-k2.6`
+
 
 仓库 Settings → Secrets and variables → Actions：
 
 - `TWITTERAPI_IO_KEY`（可选，仅 Nitter 失败时兜底用）
 - `DISCORD_WEBHOOK_URL`（必需）
+- `ARK_API_KEY`（可选，启用 LLM 总结）
+- `ARK_BASE_URL`（可选，默认值见 `.env.example`）
+- `ARK_MODEL`（可选，默认 `kimi-k2.6`）
 
 ## KOL 配置
 
@@ -85,7 +97,7 @@ src/      主流程
   state.py        last_seen 持久化
   main.py         调度入口
 scripts/  小工具（ping、Discord 推送）
-prompts/  LLM prompt（后续阶段）
+prompts/  LLM prompt（system.md / daily_brief.md）
 data/     last_seen.json + 原始抓取 raw_*.json（raw 被 .gitignore 忽略）
 reports/  生成的 markdown 报告（被 .gitignore 忽略）
 .github/workflows/  定时任务
@@ -93,6 +105,6 @@ reports/  生成的 markdown 报告（被 .gitignore 忽略）
 
 ## 后续路线
 
-- 接入 LLM（OpenAI）做中文总结、情绪打分、分类。
+- 调整 LLM prompt，优化个股信号和预警质量。
 - 加入关键词搜索 + 个股代码关联。
 - 预警规则（高/中/低优先级）。
