@@ -91,6 +91,8 @@ def _load_article_sources() -> list[dict]:
     for item in data.get("article_sources") or []:
         if not item.get("enabled"):
             continue
+        if item.get("local_only") and os.environ.get("GITHUB_ACTIONS"):
+            continue
         if not (item.get("rss_url") or "").strip() and not (item.get("manual_articles") or []):
             continue
         sources.append(dict(item))

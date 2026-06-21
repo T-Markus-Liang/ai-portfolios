@@ -9,7 +9,8 @@ article_sources:
   - name: 投资人六便士
     kind: wechat
     enabled: true
-    rss_url: ""
+    rss_url: "http://127.0.0.1:4010/feeds/MP_WXS_3203395390.rss"
+    local_only: true
     tags: ["投资", "国内市场", "全球映射"]
     manual_articles:
       - title: 投资人六便士公众号文章
@@ -19,7 +20,8 @@ article_sources:
   - name: 击球区小能手1
     kind: wechat
     enabled: true
-    rss_url: ""
+    rss_url: "http://127.0.0.1:4010/feeds/MP_WXS_3198212796.rss"
+    local_only: true
     tags: ["投资", "国内市场", "交易框架"]
     manual_articles:
       - title: 击球区小能手1公众号文章

@@ -58,6 +58,11 @@ Continue the existing investment brief project, correcting the product positioni
 - Port `4000` was occupied locally, so the compose mapping was changed to host port `4010` while keeping container port `4000`.
 - Confirmed `curl -I http://127.0.0.1:4010` returns HTTP 200 and container `ai-portfolios-wewe-rss` is running.
 
+- WeWe RSS feed discovery succeeded: `投资人六便士` -> `MP_WXS_3203395390`, `击球区小能手1` -> `MP_WXS_3198212796`.
+- Wrote local RSS URLs into `config/article_sources.yaml` and marked them `local_only: true` so GitHub Actions skips localhost feeds.
+- Verified local RSS parsing: `投资人六便士` returned 10 articles; `击球区小能手1` feed currently returned 0 articles.
+- Updated `src/main.py` to skip `local_only` article sources when `GITHUB_ACTIONS` is set.
+
 ## Decisions
 
 - Use `kimi-k2.6` on `https://ark.cn-beijing.volces.com/api/coding/v3`.
@@ -82,4 +87,4 @@ Continue the existing investment brief project, correcting the product positioni
 
 ## Open questions
 
-- Open `http://127.0.0.1:4010`, log in with auth code `ai-portfolios`, add the two WeChat article share links in WeWe RSS, then copy generated RSS URLs into `config/article_sources.yaml`.
+- Local WeWe RSS URLs are configured. For GitHub Actions automation, deploy WeWe RSS to a public HTTPS endpoint or keep using manual articles for cloud runs.
