@@ -132,3 +132,10 @@ Continue the existing investment brief project, correcting the product positioni
 - Added report completeness validation requiring all expected Markdown sections and the investment-disclaimer footer; incomplete or empty model output now retries instead of silently becoming a broken investment brief.
 - Verified locally with `.venv` and Ark/Kimi using historical raw data and `FORCE_LOOKBACK_DAYS=1 .venv/bin/python -m src.main`; generated an analysis-mode report containing `一页结论`, `今日最大公约数`, `机会线索矩阵`, `分歧与风险`, `证据链摘录`, and `明日行动清单`.
 - Verified PDF rendering path locally with `.venv/bin/python scripts/render_report_pdf.py`; local Playwright browser is not installed so fallback PDF rendered, while GitHub Actions installs Chromium and should use the HTML/Chromium path.
+
+- User reported Codex cron automations were creating many visible sidebar threads.
+- Confirmed current Codex cron automations run as standalone local job threads; there were repeated visible threads for `微信公众号文章本地同步` and `微信群原文归档本地同步`.
+- Added `scripts/run_automation_job.sh`, a minimal wrapper for `wechat_articles` and `wechat_group` jobs. It captures stdout/stderr, appends a compact row to `docs/automation-runs.md`, commits/pushes the run ledger, and preserves the underlying script exit code.
+- Created `docs/automation-runs.md` as the unified automation run ledger so future results can be reviewed in one document instead of opening per-run threads.
+- Updated both Codex automations to call the wrapper and instruct each run to report only the ledger path and archive the run thread afterward.
+- Archived prior visible automation run threads for the two WeChat sync jobs to reduce sidebar clutter.
