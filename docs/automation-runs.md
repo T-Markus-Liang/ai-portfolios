@@ -4,6 +4,7 @@
 
 | 时间 | 任务 | 状态 | 摘要 |
 |---|---|---|---|
+| 2026-06-26 08:21:36 CST | 微信群原文归档本地同步 | 失败(124) | ERROR: job timed out after 90s |
 | 2026-06-26 08:12:03 CST | 微信公众号文章本地同步 | 成功 | [OK] total articles: 11; touched this run: 0 /Users/markus/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020 warnings.warn( [WARN] working tree has local tracked change… |
 | 2026-06-25 22:22:14 CST | 微信群原文归档本地同步 | 失败(124) | ERROR: job timed out after 90s |
 | 2026-06-25 18:18:21 CST | 微信公众号文章本地同步 | 成功 | [OK] total articles: 11; touched this run: 0 /Users/markus/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020 warnings.warn( [WARN] working tree has local tracked change… |
