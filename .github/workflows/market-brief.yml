@@ -50,8 +50,8 @@ jobs:
           ARK_PLANNER_FALLBACK_MODELS: ${{ secrets.ARK_PLANNER_FALLBACK_MODELS || 'minimax-m3' }}
           ARK_WRITER_FALLBACK_MODELS: ${{ secrets.ARK_WRITER_FALLBACK_MODELS || 'doubao-seed-2.0-lite,deepseek-v4-flash' }}
           ARK_TIMEOUT_SECONDS: ${{ secrets.ARK_TIMEOUT_SECONDS || '45' }}
-          ARK_PLANNER_TIMEOUT_SECONDS: ${{ secrets.ARK_PLANNER_TIMEOUT_SECONDS || '20' }}
-          ARK_WRITER_TIMEOUT_SECONDS: ${{ secrets.ARK_WRITER_TIMEOUT_SECONDS || '45' }}
+          ARK_PLANNER_TIMEOUT_SECONDS: ${{ secrets.ARK_PLANNER_TIMEOUT_SECONDS || '35' }}
+          ARK_WRITER_TIMEOUT_SECONDS: ${{ secrets.ARK_WRITER_TIMEOUT_SECONDS || '60' }}
           FORCE_LOOKBACK_DAYS: ${{ github.event.inputs.force_lookback_days || '0' }}
         run: |
           python -m src.main

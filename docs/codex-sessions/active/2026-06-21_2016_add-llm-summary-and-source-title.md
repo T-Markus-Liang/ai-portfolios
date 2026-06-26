@@ -180,3 +180,10 @@ Continue the existing investment brief project, correcting the product positioni
 - Updated `scripts/render_report_pdf.py` to render third-level headings such as `来源分布`.
 - Updated `README.md` and `docs/report-product-spec.md` to freeze the report v2 structure and analysis logic.
 - Verified with Python compilation, structured rendering checks, and a local report/PDF generation smoke test. Local Ark call hit connection fallback, but the fallback report now uses the upgraded productized structure.
+
+- Reviewed the latest 2026-06-26 `-3` PDF and found the v2 structure rendered, but it still exposed model timeout/response diagnostics in the cover and used overly wide tables for main-line analysis.
+- Hid detailed LLM/API diagnostics from the formal PDF; failures now print to GitHub Actions stderr while the report only shows a concise downgrade note.
+- Reduced Planner input from 18 to 14 records and shortened per-item text to reduce Ark timeout risk while still preserving one high-value item per source.
+- Increased default Ark role timeouts to Planner 35 seconds and Writer 60 seconds in code, `.env.example`, workflow, and README.
+- Converted `主线深度拆解` and `机会与仓位建议` from wide tables into card-style Markdown sections for better PDF readability.
+- Added source-balanced evidence selection and per-record theme detection so `来源分布` and `证据链` are less dominated by one account/theme.

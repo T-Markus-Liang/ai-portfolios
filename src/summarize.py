@@ -11,8 +11,8 @@ Env vars:
   ARK_PLANNER_FALLBACK_MODELS default minimax-m3
   ARK_WRITER_FALLBACK_MODELS  default doubao-seed-2.0-lite,deepseek-v4-flash
   ARK_TIMEOUT_SECONDS default 45
-  ARK_PLANNER_TIMEOUT_SECONDS default 20
-  ARK_WRITER_TIMEOUT_SECONDS default 45
+  ARK_PLANNER_TIMEOUT_SECONDS default 35
+  ARK_WRITER_TIMEOUT_SECONDS default 60
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from typing import Any
 
 INVESTMENT_KEYWORDS = (
@@ -40,15 +41,15 @@ DEFAULT_WRITER_MODEL = "minimax-m3"
 DEFAULT_PLANNER_FALLBACK_MODELS = ("minimax-m3",)
 DEFAULT_WRITER_FALLBACK_MODELS = ("doubao-seed-2.0-lite", "deepseek-v4-flash")
 DEFAULT_TIMEOUT_SECONDS = 45.0
-DEFAULT_PLANNER_TIMEOUT_SECONDS = 20.0
-DEFAULT_WRITER_TIMEOUT_SECONDS = 45.0
+DEFAULT_PLANNER_TIMEOUT_SECONDS = 35.0
+DEFAULT_WRITER_TIMEOUT_SECONDS = 60.0
 
-MAX_ITEMS = 18
+MAX_ITEMS = 14
 MAX_RETRY_ITEMS = 10
-MAX_TEXT_LEN = 220
-MAX_ARCHIVE_TEXT_LEN = 1600
+MAX_TEXT_LEN = 170
+MAX_ARCHIVE_TEXT_LEN = 1200
 MAX_RETRY_TEXT_LEN = 140
-MAX_PAYLOAD_CHARS = 6200
+MAX_PAYLOAD_CHARS = 4200
 MAX_RETRY_PAYLOAD_CHARS = 3600
 MAX_OUTPUT_TOKENS = 4096
 REQUIRED_SECTIONS = (
@@ -77,13 +78,13 @@ PLANNER_TEMPLATE = """基于 JSON 输出投资报告提纲。latest 是本次新
 "ev":[{"s":"A/B/C/D","theme":"主题","src":"来源","sum":"推文/文章/群消息摘要","url":"URL或本地归档","use":"支撑哪个结论"}],
 "next":[{"it":"验证事项","why":"重要性","src":"观察指标/来源","act":"若验证通过/失败怎么做"}]}
 
-数量：calls 2-4；deep 2-3；plan 2-4；mom 2-4；src 3-6；risk 2-3；ev 5-8；next 3-5。
+数量：calls 2-3；deep 2；plan 2-3；mom 2-3；src 4-7；risk 2；ev 5-7；next 3。
 
 JSON:
 {{items}}
 """
 
-WRITER_TEMPLATE = """把下面的报告提纲 JSON 改写成完整、清晰、专业但普通投资者也能读懂的中文投资报告 JSON。你只负责把逻辑讲清楚，不新增未经提纲支持的主题。每条主线必须体现：结论 -> 论据 -> 反证 -> 国内映射 -> 行动建议。禁止 Markdown，禁止解释。
+WRITER_TEMPLATE = """把下面的报告提纲 JSON 稍微润色成更清晰的中文投资报告 JSON。不要扩写太长，不新增未经提纲支持的主题。每条主线体现：结论 -> 论据 -> 反证 -> 国内映射 -> 行动建议。禁止 Markdown，禁止解释。
 
 输出同一 schema，字段必须完整，短句但信息密度高：
 {"one":{"temp":"","risk":"","pos":"","conclusion":"","note":"","avoid":""},"calls":[{"t":"","rank":"","d":"","e":"","why":"","map":"","act":""}],"deep":[{"t":"","thesis":"","bull":"","bear":"","map":"","strat":"","watch":""}],"plan":[{"t":"","bucket":"","pos":"","entry":"","add":"","trim":"","bad":""}],"mom":[{"t":"","chg":"","drv":"","watch":""}],"src":[{"name":"","stance":"","theme":"","point":""}],"risk":[{"r":"","trig":"","imp":"","resp":""}],"ev":[{"s":"","theme":"","src":"","sum":"","url":"","use":""}],"next":[{"it":"","why":"","src":"","act":""}]}
@@ -188,7 +189,8 @@ def _pack(items: list[dict[str, Any]], *, max_items: int, max_text_len: int, max
     selected: list[dict[str, Any]] = []
     seen_ids: set[int] = set()
 
-    for source in sorted({str(item.get("kol") or item.get("handle") or "") for item in items}):
+    sources = sorted({str(item.get("kol") or item.get("handle") or "") for item in items})
+    for source in sources[:max_items]:
         source_items = [item for item in items if str(item.get("kol") or item.get("handle") or "") == source]
         if not source_items:
             continue
@@ -214,6 +216,67 @@ def _pack(items: list[dict[str, Any]], *, max_items: int, max_text_len: int, max
         packed.append(record)
         total_chars += record_chars
     return packed
+
+
+def _balanced_records(records: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    seen_ids: set[int] = set()
+    sources = sorted({str(record.get("source") or "") for record in records})
+    for source in sources:
+        source_records = [record for record in records if str(record.get("source") or "") == source]
+        if not source_records:
+            continue
+        best = max(
+            source_records,
+            key=lambda record: (
+                1 if record.get("contextRole") == "latest" else 0,
+                _to_int(record.get("heat")),
+                _keyword_score(str(record.get("text") or "")),
+                len(record.get("text") or ""),
+            ),
+        )
+        selected.append(best)
+        seen_ids.add(id(best))
+        if len(selected) >= limit:
+            return selected
+    for record in sorted(
+        records,
+        key=lambda item: (
+            1 if item.get("contextRole") == "latest" else 0,
+            _to_int(item.get("heat")),
+            _keyword_score(str(item.get("text") or "")),
+            len(item.get("text") or ""),
+        ),
+        reverse=True,
+    ):
+        if id(record) in seen_ids:
+            continue
+        selected.append(record)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+def _one_per_source(records: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    for source in sorted({str(record.get("source") or "") for record in records}):
+        source_records = [record for record in records if str(record.get("source") or "") == source]
+        if not source_records:
+            continue
+        selected.append(
+            max(
+                source_records,
+                key=lambda record: (
+                    _keyword_score(str(record.get("text") or "")),
+                    1 if record.get("contextRole") == "latest" else 0,
+                    _to_int(record.get("heat")),
+                    len(record.get("text") or ""),
+                ),
+            )
+        )
+        if len(selected) >= limit:
+            break
+    return selected
 
 
 def _finish_reason(resp: Any) -> str:
@@ -616,6 +679,38 @@ def _render_table(headers: list[str], rows: list[list[str]]) -> list[str]:
     return lines
 
 
+def _render_deep_cards(rows: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    for row in rows:
+        lines += [
+            f"### {_safe_text(row.get('theme'))}",
+            "",
+            f"- **核心论点**：{_safe_text(row.get('thesis'))}",
+            f"- **支持论据**：{_safe_text(row.get('bull'))}",
+            f"- **反向证据/缺口**：{_safe_text(row.get('bear'))}",
+            f"- **国内映射**：{_safe_text(row.get('china_map'))}",
+            f"- **操作含义**：{_safe_text(row.get('strategy'))}",
+            f"- **验证信号**：{_safe_text(row.get('watch'))}",
+            "",
+        ]
+    return lines
+
+
+def _render_action_cards(rows: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    for row in rows:
+        lines += [
+            f"### {_safe_text(row.get('theme'))}｜{_safe_text(row.get('bucket'))}｜{_safe_text(row.get('position'))}",
+            "",
+            f"- **介入条件**：{_safe_text(row.get('entry'))}",
+            f"- **加仓条件**：{_safe_text(row.get('add'))}",
+            f"- **减仓/回避条件**：{_safe_text(row.get('trim'))}",
+            f"- **证伪信号**：{_safe_text(row.get('invalid'))}",
+            "",
+        ]
+    return lines
+
+
 def _render_report_data(data: dict[str, Any]) -> str:
     one_page = data.get("one_page") if isinstance(data.get("one_page"), dict) else {}
     key_calls = _safe_rows(data.get("key_calls"), 3)
@@ -656,39 +751,11 @@ def _render_report_data(data: dict[str, Any]) -> str:
         "",
         "## 主线深度拆解",
         "",
-        *_render_table(
-            ["主线", "核心论点", "支持论据", "反向证据/缺口", "国内映射", "操作含义", "验证信号"],
-            [
-                [
-                    _safe_text(row.get("theme")),
-                    _safe_text(row.get("thesis")),
-                    _safe_text(row.get("bull")),
-                    _safe_text(row.get("bear")),
-                    _safe_text(row.get("china_map")),
-                    _safe_text(row.get("strategy")),
-                    _safe_text(row.get("watch")),
-                ]
-                for row in deep_dives
-            ],
-        ),
+        *_render_deep_cards(deep_dives),
         "",
         "## 机会与仓位建议",
         "",
-        *_render_table(
-            ["主题", "分层", "建议仓位", "介入条件", "加仓条件", "减仓/回避条件", "证伪信号"],
-            [
-                [
-                    _safe_text(row.get("theme")),
-                    _safe_text(row.get("bucket")),
-                    _safe_text(row.get("position")),
-                    _safe_text(row.get("entry")),
-                    _safe_text(row.get("add")),
-                    _safe_text(row.get("trim")),
-                    _safe_text(row.get("invalid")),
-                ]
-                for row in action_plan
-            ],
-        ),
+        *_render_action_cards(action_plan),
         "",
         "## 市场动量与分歧",
         "",
@@ -824,11 +891,15 @@ def _ensure_evidence_links(content: str, records: list[dict[str, Any]]) -> str:
     lines = _evidence_lines(records, limit=4)
     enriched_lines = []
     for line in lines:
-        match = re.match(r"- \[([ABCD])\] ([^：]+)：(.+?)；链接：(.+)$", line)
+        match = re.match(r"- \[([ABCD])\] (?:(.+?) / )?([^：]+)：(.+?)；链接：(.+)$", line)
         if match:
+            theme = match.group(2) or "综合"
+            source = match.group(3)
+            summary = match.group(4)
+            url = match.group(5)
             enriched_lines.append(
-                f"- [{match.group(1)}] **综合** / {match.group(2)}：{match.group(3)}"
-                f"；用途：支撑核心判断；链接：{_as_markdown_link(match.group(4))}"
+                f"- [{match.group(1)}] **{theme}** / {source}：{summary}"
+                f"；用途：支撑核心判断；链接：{_as_markdown_link(url)}"
             )
         else:
             enriched_lines.append(line)
@@ -869,10 +940,11 @@ def summarize(items: list[dict[str, Any]]) -> str:
             base_url,
             "planner",
             planner_prompt,
-            max_tokens=900,
+                max_tokens=1200,
         )
     except LLMError as exc:
         planner_error = str(exc)
+        print(f"[WARN] planner failed; using rule outline: {planner_error}", file=sys.stderr)
         outline_data = _outline_from_records(packed, planner_error)
     outline = _coerce_report_data(outline_data)
     outline_md = _render_report_data(outline)
@@ -887,19 +959,19 @@ def summarize(items: list[dict[str, Any]]) -> str:
             base_url,
             "writer",
             writer_prompt,
-            max_tokens=1800,
+            max_tokens=2400,
         )
         report = _render_report_data(_coerce_report_data(report_data))
         return _ensure_evidence_links(report, packed)
     except LLMError as exc:
+        writer_error = str(exc)
+        print(f"[WARN] writer failed; using outline report: {writer_error}", file=sys.stderr)
         note = (
-            f"> ⚠️ Writer 模型调用失败，已使用 Planner 提纲直接生成报告；"
-            f"planner={planner_model}；失败原因：{str(exc)[:180]}"
+            f"> ⚠️ 本次使用结构化提纲生成报告；核心判断仍来自已抓取的信息源。"
         )
         if planner_error:
             note = (
-                f"> ⚠️ Planner 与 Writer 均未成功，已使用规则提纲生成报告；"
-                f"planner_error={planner_error[:120]}；writer_error={str(exc)[:120]}"
+                f"> ⚠️ 本次使用规则引擎生成同结构报告；正式判断以证据链和明日行动清单为准。"
             )
         return note + "\n\n" + _ensure_evidence_links(outline_md, packed)
 
@@ -926,6 +998,18 @@ def _theme_counts(records: list[dict[str, Any]], role: str | None = None) -> dic
     return counts
 
 
+def _record_theme(record: dict[str, Any], default: str = "综合") -> str:
+    text = f"{record.get('title') or ''} {record.get('text') or ''}"
+    best_theme = default
+    best_score = 0
+    for theme, keywords in THEME_KEYWORDS.items():
+        score = sum(1 for keyword in keywords if keyword in text)
+        if score > best_score:
+            best_theme = theme
+            best_score = score
+    return best_theme
+
+
 def _top_themes(records: list[dict[str, Any]]) -> list[tuple[str, int]]:
     counts = _theme_counts(records)
     return sorted(counts.items(), key=lambda item: item[1], reverse=True)[:4] or [("暂无高一致性主题", 0)]
@@ -937,14 +1021,15 @@ def _outline_from_records(records: list[dict[str, Any]], error: str | None = Non
     secondary = top[1][0] if len(top) > 1 else "相关产业链"
     evidence_rows = []
     for line in _evidence_lines(records, limit=4):
-        match = re.match(r"- \[([ABCD])\] ([^：]+)：(.+?)；链接：(.+)$", line)
+        match = re.match(r"- \[([ABCD])\] (?:(.+?) / )?([^：]+)：(.+?)；链接：(.+)$", line)
         if match:
             evidence_rows.append(
                 {
                     "s": match.group(1),
-                    "src": match.group(2),
-                    "sum": match.group(3),
-                    "url": match.group(4),
+                    "theme": match.group(2) or "综合",
+                    "src": match.group(3),
+                    "sum": match.group(4),
+                    "url": match.group(5),
                 }
             )
     return {
@@ -973,8 +1058,8 @@ def _outline_from_records(records: list[dict[str, Any]], error: str | None = Non
             {"t": secondary, "chg": "待确认", "drv": "主题热度进入观察区", "watch": "是否出现订单、价格或财报催化"},
         ],
         "src": [
-            {"name": row.get("source") or "未知来源", "stance": "信息源", "theme": primary, "point": (row.get("text") or row.get("title") or "")[:70]}
-            for row in records[:6]
+            {"name": row.get("source") or "未知来源", "stance": "信息源", "theme": _record_theme(row, primary), "point": (row.get("text") or row.get("title") or "")[:90]}
+            for row in _one_per_source(records, 7)
         ],
         "risk": [
             {"r": "主题拥挤", "trig": "热点只停留在观点层且涨幅过大", "imp": "情绪交易后回撤", "resp": "等订单/价格/业绩验证"},
@@ -990,24 +1075,17 @@ def _outline_from_records(records: list[dict[str, Any]], error: str | None = Non
 
 
 def _evidence_lines(records: list[dict[str, Any]], limit: int = 6) -> list[str]:
-    selected = sorted(
-        records,
-        key=lambda record: (
-            1 if record.get("contextRole") == "latest" else 0,
-            _to_int(record.get("heat")),
-            len(record.get("text") or ""),
-        ),
-        reverse=True,
-    )[:limit]
+    selected = _balanced_records(records, limit)
     lines: list[str] = []
     for record in selected:
         source = record.get("source") or "未知来源"
+        theme = _record_theme(record, "综合")
         text = (record.get("text") or record.get("title") or "").strip()
         if len(text) > 90:
             text = text[:90] + "…"
         url = record.get("url") or "本地归档"
         strength = "B" if record.get("contextRole") == "latest" else "C"
-        lines.append(f"- [{strength}] {source}：{text}；链接：{url}")
+        lines.append(f"- [{strength}] {theme} / {source}：{text}；链接：{url}")
     return lines or ["- [D] 暂无可用证据；链接：本地归档"]
 
 
@@ -1019,5 +1097,6 @@ def fallback_summary(items: list[dict[str, Any]], error: str) -> str:
         max_payload_chars=MAX_PAYLOAD_CHARS,
     )
     escaped_error = error.replace("\n", " ")[:220]
+    print(f"[WARN] summarize failed; using fallback summary: {escaped_error}", file=sys.stderr)
     outline = _coerce_report_data(_outline_from_records(records, escaped_error))
-    return f"> ⚠️ LLM 调用失败，以下为规则引擎生成的产品化简报；失败原因：{escaped_error}\n\n{_render_report_data(outline)}"
+    return f"> ⚠️ 本次使用规则引擎生成同结构报告；正式判断以证据链和明日行动清单为准。\n\n{_render_report_data(outline)}"
