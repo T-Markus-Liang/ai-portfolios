@@ -171,3 +171,12 @@ Continue the existing investment brief project, correcting the product positioni
 - Disabled JSON mode by default for `minimax-m3` and `deepseek-v4-flash`, because Ark tests showed these models either perform better without JSON mode or do not support `response_format`.
 - Added schema validation for candidate model output: valid JSON without the required report fields no longer counts as success.
 - Updated `.github/workflows/market-brief.yml`, `.env.example`, `README.md`, and `docs/report-product-spec.md` to document the two-stage Planner/Writer pipeline.
+
+- Reviewed the generated 2026-06-26 PDF and confirmed the pipeline worked but the report still looked like a thin skeleton: fixed sections were present, yet decision advice, argument/evidence chains, source coverage, and action rules were not strong enough for a professional investment report.
+- Upgraded `src/summarize.py` report schema from summary-oriented fields to productized decision fields: `one_page`, `key_calls`, `deep_dives`, `action_plan`, `momentum_table`, `source_view`, `risk_radar`, `evidence`, and `tomorrow`.
+- Changed the fixed PDF directory to `一页决策总览`, `今日核心判断`, `主线深度拆解`, `机会与仓位建议`, `市场动量与分歧`, `风险与证伪`, `证据链`, and `明日行动清单`.
+- Expanded Planner input packing from a very small sample to up to 18 high-weight records so the system can cover fewer-than-20 monitored X/blogger sources instead of over-compressing.
+- Added automatic schema backfill so partial model JSON still renders complete decision sections rather than empty tables.
+- Updated `scripts/render_report_pdf.py` to render third-level headings such as `来源分布`.
+- Updated `README.md` and `docs/report-product-spec.md` to freeze the report v2 structure and analysis logic.
+- Verified with Python compilation, structured rendering checks, and a local report/PDF generation smoke test. Local Ark call hit connection fallback, but the fallback report now uses the upgraded productized structure.

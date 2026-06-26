@@ -93,6 +93,16 @@ h2 {
   line-height: 1.35;
   break-after: avoid;
 }
+h3 {
+  margin: 12px 0 6px;
+  padding: 4px 8px;
+  color: var(--ink);
+  background: var(--panel);
+  border-left: 3px solid var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+  break-after: avoid;
+}
 p { margin: 6px 0; }
 ul { margin: 6px 0 10px 0; padding: 0; list-style: none; }
 li {
@@ -283,6 +293,9 @@ def markdown_to_html(markdown: str) -> str:
                 in_source_index = True
                 body.append('<section class="source-index">')
             body.append(f"<h2>{heading}</h2>")
+        elif line.startswith("### "):
+            close_list()
+            body.append(f"<h3>{_clean_inline(line[4:])}</h3>")
         elif line.startswith("> "):
             close_list()
             body.append(f"<blockquote>{_clean_inline(line[2:])}</blockquote>")

@@ -43,49 +43,50 @@ DEFAULT_TIMEOUT_SECONDS = 45.0
 DEFAULT_PLANNER_TIMEOUT_SECONDS = 20.0
 DEFAULT_WRITER_TIMEOUT_SECONDS = 45.0
 
-MAX_ITEMS = 6
-MAX_RETRY_ITEMS = 4
-MAX_TEXT_LEN = 100
-MAX_ARCHIVE_TEXT_LEN = 900
-MAX_RETRY_TEXT_LEN = 80
-MAX_PAYLOAD_CHARS = 1400
-MAX_RETRY_PAYLOAD_CHARS = 900
+MAX_ITEMS = 18
+MAX_RETRY_ITEMS = 10
+MAX_TEXT_LEN = 220
+MAX_ARCHIVE_TEXT_LEN = 1600
+MAX_RETRY_TEXT_LEN = 140
+MAX_PAYLOAD_CHARS = 6200
+MAX_RETRY_PAYLOAD_CHARS = 3600
 MAX_OUTPUT_TOKENS = 4096
 REQUIRED_SECTIONS = (
-    "## 一页决策看板",
-    "## 核心结论",
-    "## 市场动量图谱",
-    "## 主线逻辑链",
-    "## 机会矩阵",
-    "## 风险雷达",
-    "## 证据链摘录",
-    "## 明日验证清单",
+    "## 一页决策总览",
+    "## 今日核心判断",
+    "## 主线深度拆解",
+    "## 机会与仓位建议",
+    "## 市场动量与分歧",
+    "## 风险与证伪",
+    "## 证据链",
+    "## 明日行动清单",
 )
 
 SYSTEM_PROMPT = "你是中文买方投研助手。严格遵守用户要求的输出格式，不输出思考过程。"
 
-PLANNER_TEMPLATE = """基于 JSON 输出极简投资报告提纲 JSON。latest 是本次新增，recent 是近几天上下文。你只负责定目录、核心判断和逻辑骨架，不负责成文。短句，禁止 Markdown，禁止解释。
+PLANNER_TEMPLATE = """基于 JSON 输出投资报告提纲。latest 是本次新增，recent 是近几天上下文。你只负责判断结构、核心点、论点论据链和行动框架，不负责成文。监控源少于20个，要尽量覆盖不同博主/来源，不能只抓一两个热点词。短句，禁止 Markdown，禁止解释。
 
 输出 schema，key 必须使用英文短 key：
-{"one":{"temp":"偏热/中性/偏冷/风险升温","risk":"低/中/高","conclusion":"一句话","note":"给普通投资者一句话"},
-"calls":[{"t":"主题","d":"强化/降温/反转/待确认","e":"A/B/C/D","map":"国内映射","act":"进攻/观察/等待/回避"}],
+{"one":{"temp":"偏热/中性/偏冷/风险升温","risk":"低/中/高","pos":"总体仓位态度","conclusion":"一句话总判断","note":"普通投资者提示","avoid":"今天不要做什么"},
+"calls":[{"t":"主题","rank":"1/2/3","d":"强化/降温/反转/待确认","e":"A/B/C/D","why":"一句话理由","map":"国内映射","act":"进攻/观察/等待/回避"}],
+"deep":[{"t":"主题","thesis":"核心论点","bull":"支持论据，至少2点","bear":"反向证据/缺口","map":"国内映射","strat":"操作含义","watch":"验证信号"}],
+"plan":[{"t":"主题","bucket":"进攻/观察/等待/回避","pos":"定性仓位","entry":"介入条件","add":"加仓条件","trim":"减仓/回避条件","bad":"证伪信号"}],
 "mom":[{"t":"主题","chg":"动量变化","drv":"核心驱动","watch":"观察项"}],
-"logic":[{"sig":"原始信号","mech":"产业/资金逻辑","map":"国内映射","con":"结论"}],
-"opp":[{"t":"主题","ben":"受益方向","e":"A/B/C/D","crowd":"低/中/高","strat":"仓位态度","bad":"证伪信号"}],
+"src":[{"name":"来源/博主","stance":"支持/谨慎/反对/信息源","theme":"对应主题","point":"贡献的关键证据"}],
 "risk":[{"r":"风险","trig":"触发","imp":"影响","resp":"应对"}],
-"ev":[{"s":"A/B/C/D","src":"来源","sum":"证据摘要","url":"URL或本地归档"}],
-"next":[{"it":"验证事项","why":"重要性","src":"观察指标/来源"}]}
+"ev":[{"s":"A/B/C/D","theme":"主题","src":"来源","sum":"推文/文章/群消息摘要","url":"URL或本地归档","use":"支撑哪个结论"}],
+"next":[{"it":"验证事项","why":"重要性","src":"观察指标/来源","act":"若验证通过/失败怎么做"}]}
 
-数量：calls 2-3；mom 2-3；logic 1-2；opp 2-3；risk 2；ev 3-4；next 3。
+数量：calls 2-4；deep 2-3；plan 2-4；mom 2-4；src 3-6；risk 2-3；ev 5-8；next 3-5。
 
 JSON:
 {{items}}
 """
 
-WRITER_TEMPLATE = """把下面的报告提纲 JSON 改写成完整、清晰、专业但普通投资者也能读懂的中文投资报告 JSON。你只负责表达和补充逻辑连贯性，不新增未经提纲支持的主题。禁止 Markdown，禁止解释。
+WRITER_TEMPLATE = """把下面的报告提纲 JSON 改写成完整、清晰、专业但普通投资者也能读懂的中文投资报告 JSON。你只负责把逻辑讲清楚，不新增未经提纲支持的主题。每条主线必须体现：结论 -> 论据 -> 反证 -> 国内映射 -> 行动建议。禁止 Markdown，禁止解释。
 
 输出同一 schema，字段必须完整，短句但信息密度高：
-{"one":{"temp":"","risk":"","conclusion":"","note":""},"calls":[{"t":"","d":"","e":"","map":"","act":""}],"mom":[{"t":"","chg":"","drv":"","watch":""}],"logic":[{"sig":"","mech":"","map":"","con":""}],"opp":[{"t":"","ben":"","e":"","crowd":"","strat":"","bad":""}],"risk":[{"r":"","trig":"","imp":"","resp":""}],"ev":[{"s":"","src":"","sum":"","url":""}],"next":[{"it":"","why":"","src":""}]}
+{"one":{"temp":"","risk":"","pos":"","conclusion":"","note":"","avoid":""},"calls":[{"t":"","rank":"","d":"","e":"","why":"","map":"","act":""}],"deep":[{"t":"","thesis":"","bull":"","bear":"","map":"","strat":"","watch":""}],"plan":[{"t":"","bucket":"","pos":"","entry":"","add":"","trim":"","bad":""}],"mom":[{"t":"","chg":"","drv":"","watch":""}],"src":[{"name":"","stance":"","theme":"","point":""}],"risk":[{"r":"","trig":"","imp":"","resp":""}],"ev":[{"s":"","theme":"","src":"","sum":"","url":"","use":""}],"next":[{"it":"","why":"","src":"","act":""}]}
 
 JSON:
 {{outline}}
@@ -340,9 +341,9 @@ def _valid_report_data(data: dict[str, Any]) -> bool:
     required = (
         "one_page",
         "key_calls",
-        "momentum_table",
-        "logic_chains",
-        "opportunity_matrix",
+        "deep_dives",
+        "action_plan",
+        "source_view",
         "risk_radar",
         "evidence",
         "tomorrow",
@@ -354,16 +355,18 @@ def _valid_report_data(data: dict[str, Any]) -> bool:
 
 def _coerce_report_data(data: dict[str, Any]) -> dict[str, Any]:
     key_calls_raw = data.get("key_calls") or data.get("calls")
+    deep_raw = data.get("deep_dives") or data.get("deep") or data.get("logic_chains") or data.get("logic")
+    action_raw = data.get("action_plan") or data.get("plan") or data.get("opportunity_matrix") or data.get("opp")
     momentum_raw = data.get("momentum_table") or data.get("mom")
-    logic_raw = data.get("logic_chains") or data.get("logic")
-    opportunities_raw = data.get("opportunity_matrix") or data.get("opp")
+    source_raw = data.get("source_view") or data.get("src")
     risks_raw = data.get("risk_radar") or data.get("risk")
     evidence_raw = data.get("evidence") or data.get("ev")
     tomorrow_raw = data.get("tomorrow") or data.get("next")
     key_calls_raw = key_calls_raw if isinstance(key_calls_raw, list) else []
+    deep_raw = deep_raw if isinstance(deep_raw, list) else []
+    action_raw = action_raw if isinstance(action_raw, list) else []
     momentum_raw = momentum_raw if isinstance(momentum_raw, list) else []
-    logic_raw = logic_raw if isinstance(logic_raw, list) else []
-    opportunities_raw = opportunities_raw if isinstance(opportunities_raw, list) else []
+    source_raw = source_raw if isinstance(source_raw, list) else []
     risks_raw = risks_raw if isinstance(risks_raw, list) else []
     evidence_raw = evidence_raw if isinstance(evidence_raw, list) else []
     tomorrow_raw = tomorrow_raw if isinstance(tomorrow_raw, list) else []
@@ -379,8 +382,10 @@ def _coerce_report_data(data: dict[str, Any]) -> dict[str, Any]:
             key_calls.append(
                 {
                     "theme": row.get("theme") or row.get("t"),
+                    "rank": row.get("rank") or row.get("priority") or "",
                     "direction": row.get("direction") or row.get("d") or "待确认",
                     "evidence": row.get("evidence") or row.get("e") or "C",
+                    "why": row.get("why") or row.get("reason") or "信号仍需交叉验证",
                     "china_map": row.get("china_map") or row.get("map") or "A股/港股相关产业链",
                     "action": row.get("action") or row.get("act") or "观察",
                 }
@@ -389,10 +394,42 @@ def _coerce_report_data(data: dict[str, Any]) -> dict[str, Any]:
             key_calls.append(
                 {
                     "theme": first_text(row),
+                    "rank": "",
                     "direction": "待确认",
                     "evidence": "C",
+                    "why": "信号仍需交叉验证",
                     "china_map": "A股/港股相关产业链",
                     "action": "观察",
+                }
+            )
+
+    deep_dives: list[dict[str, Any]] = []
+    for row in deep_raw[:4]:
+        if isinstance(row, dict):
+            deep_dives.append(
+                {
+                    "theme": row.get("theme") or row.get("t") or row.get("signal") or row.get("sig"),
+                    "thesis": row.get("thesis") or row.get("conclusion") or row.get("con") or row.get("mechanism") or row.get("mech"),
+                    "bull": row.get("bull") or row.get("evidence") or row.get("support") or row.get("mechanism") or row.get("mech"),
+                    "bear": row.get("bear") or row.get("gap") or row.get("invalid") or row.get("bad") or "缺少价格/订单/业绩验证时不能上升为强交易结论",
+                    "china_map": row.get("china_map") or row.get("map") or "A股/港股相关产业链",
+                    "strategy": row.get("strategy") or row.get("strat") or row.get("conclusion") or row.get("con") or "纳入观察池，等待验证",
+                    "watch": row.get("watch") or row.get("next") or "资金响应、产业数据、公司公告",
+                }
+            )
+
+    action_plan: list[dict[str, Any]] = []
+    for row in action_raw[:5]:
+        if isinstance(row, dict):
+            action_plan.append(
+                {
+                    "theme": row.get("theme") or row.get("t") or row.get("target"),
+                    "bucket": row.get("bucket") or row.get("action") or row.get("act") or "观察",
+                    "position": row.get("position") or row.get("pos") or row.get("strategy") or row.get("strat") or "轻仓/观察",
+                    "entry": row.get("entry") or row.get("trigger") or "主题继续跨来源强化且国内映射放量",
+                    "add": row.get("add") or row.get("increase") or "订单/价格/业绩验证出现",
+                    "trim": row.get("trim") or row.get("reduce") or row.get("exit") or "高位放量回落或证据降温",
+                    "invalid": row.get("invalid") or row.get("bad") or "主题热度下降且缺少基本面跟进",
                 }
             )
 
@@ -408,29 +445,15 @@ def _coerce_report_data(data: dict[str, Any]) -> dict[str, Any]:
                 }
             )
 
-    logic: list[dict[str, Any]] = []
-    for row in logic_raw[:3]:
+    source_view: list[dict[str, Any]] = []
+    for row in source_raw[:8]:
         if isinstance(row, dict):
-            logic.append(
+            source_view.append(
                 {
-                    "signal": row.get("signal") or row.get("sig") or row.get("name") or row.get("theme") or row.get("t"),
-                    "mechanism": row.get("mechanism") or row.get("mech") or row.get("chain") or row.get("logic"),
-                    "china_map": row.get("china_map") or row.get("map") or "A股/港股相关产业链",
-                    "conclusion": row.get("conclusion") or row.get("con") or "进入观察池，等待验证",
-                }
-            )
-
-    opportunities: list[dict[str, Any]] = []
-    for row in opportunities_raw[:5]:
-        if isinstance(row, dict):
-            opportunities.append(
-                {
-                    "theme": row.get("theme") or row.get("t") or row.get("target"),
-                    "beneficiary": row.get("beneficiary") or row.get("ben") or row.get("target") or "相关产业链",
-                    "evidence": row.get("evidence") or row.get("e") or row.get("conviction") or "C",
-                    "crowding": row.get("crowding") or row.get("crowd") or "中",
-                    "strategy": row.get("strategy") or row.get("strat") or row.get("time_horizon") or "观察",
-                    "invalid": row.get("invalid") or row.get("bad") or "主题热度下降且缺少基本面跟进",
+                    "name": row.get("name") or row.get("source") or row.get("src") or "未知来源",
+                    "stance": row.get("stance") or "信息源",
+                    "theme": row.get("theme") or row.get("t") or "综合",
+                    "point": row.get("point") or row.get("summary") or row.get("sum") or "提供主题线索",
                 }
             )
 
@@ -452,13 +475,15 @@ def _coerce_report_data(data: dict[str, Any]) -> dict[str, Any]:
             evidence.append(
                 {
                     "strength": row.get("strength") or row.get("s") or "C",
+                    "theme": row.get("theme") or row.get("t") or "综合",
                     "source": row.get("source") or row.get("src") or "模型提炼",
                     "summary": row.get("summary") or row.get("sum"),
                     "url": row.get("url") or "本地归档",
+                    "use": row.get("use") or "支撑核心判断",
                 }
             )
         else:
-            evidence.append({"strength": "C", "source": "模型提炼", "summary": first_text(row), "url": "本地归档"})
+            evidence.append({"strength": "C", "theme": "综合", "source": "模型提炼", "summary": first_text(row), "url": "本地归档", "use": "支撑核心判断"})
 
     tomorrow: list[dict[str, Any]] = []
     for row in tomorrow_raw[:3]:
@@ -468,10 +493,11 @@ def _coerce_report_data(data: dict[str, Any]) -> dict[str, Any]:
                     "item": row.get("item") or row.get("it"),
                     "why": row.get("why") or "验证动量是否延续",
                     "source": row.get("source") or row.get("src") or "市场数据/信息源",
+                    "action": row.get("action") or row.get("act") or "通过则提高权重，失败则降级观察",
                 }
             )
         else:
-            tomorrow.append({"item": first_text(row), "why": "验证动量是否延续", "source": "市场数据/信息源"})
+            tomorrow.append({"item": first_text(row), "why": "验证动量是否延续", "source": "市场数据/信息源", "action": "通过则提高权重，失败则降级观察"})
 
     one_page = data.get("one_page") or data.get("one")
     one_page = one_page if isinstance(one_page, dict) else {}
@@ -479,25 +505,89 @@ def _coerce_report_data(data: dict[str, Any]) -> dict[str, Any]:
         one_page = {
             "market_temperature": one_page.get("market_temperature") or one_page.get("temp"),
             "risk_level": one_page.get("risk_level") or one_page.get("risk"),
+            "position": one_page.get("position") or one_page.get("pos") or "观察为主，小仓试探",
             "core_conclusion": one_page.get("core_conclusion") or one_page.get("conclusion"),
             "investor_note": one_page.get("investor_note") or one_page.get("note"),
+            "avoid": one_page.get("avoid") or "不要把单条热帖当成买入理由",
         }
     if not one_page:
         one_page = {
             "market_temperature": "中性偏热",
             "risk_level": "中",
+            "position": "观察为主，小仓试探",
             "core_conclusion": first_text(key_calls[0] if key_calls else "暂无强共识主线"),
             "investor_note": "先看证据是否连续强化，不因单条消息追高。",
+            "avoid": "不要把单条热帖当成买入理由。",
         }
+
+    themes = [_safe_text(row.get("theme")) for row in key_calls] or ["暂无高一致性主题"]
+    if not deep_dives:
+        deep_dives = [
+            {
+                "theme": theme,
+                "thesis": f"{theme} 是当前需要优先拆解的观察主线。",
+                "bull": "已有信号进入监控范围，但需要更多跨来源证据确认。",
+                "bear": "若缺少订单、价格、业绩或资金响应，仍可能只是短期叙事。",
+                "china_map": "A股/港股相关产业链",
+                "strategy": "先纳入观察池，验证后再决定是否提高权重。",
+                "watch": "成交额、板块强弱、公司公告和产业数据。",
+            }
+            for theme in themes[:3]
+        ]
+    if not action_plan:
+        action_plan = [
+            {
+                "theme": theme,
+                "bucket": "观察",
+                "position": "观察仓",
+                "entry": "连续跨来源强化且国内映射标的放量",
+                "add": "出现订单、价格、业绩或产业新闻确认",
+                "trim": "高位放量回落或证据降温",
+                "invalid": "连续多日无新增证据或国内映射失败",
+            }
+            for theme in themes[:3]
+        ]
+    if not momentum:
+        momentum = [
+            {
+                "theme": theme,
+                "change": "待确认",
+                "drivers": "进入监控范围但仍需更多证据",
+                "watch": "是否继续跨来源出现并获得资金响应",
+            }
+            for theme in themes[:3]
+        ]
+    if not source_view and evidence:
+        source_view = [
+            {
+                "name": _safe_text(row.get("source"), "未知来源"),
+                "stance": "信息源",
+                "theme": _safe_text(row.get("theme"), themes[0]),
+                "point": _safe_text(row.get("summary"), "提供主题线索"),
+            }
+            for row in evidence[:6]
+        ]
+    if not risks:
+        risks = [
+            {"risk": "主题拥挤", "trigger": "热点只停留在观点层且涨幅过大", "impact": "情绪交易后回撤", "response": "等订单、价格和业绩验证"},
+            {"risk": "映射错配", "trigger": "海外叙事强但国内兑现弱", "impact": "A股/港股跟涨失败", "response": "跟踪成交额、强弱排序和公司公告"},
+        ]
+    if not tomorrow:
+        tomorrow = [
+            {"item": "主题是否继续跨来源出现", "why": "判断动量是否延续", "source": "X/Nitter、微信公众号、微信群归档", "action": "继续强化则保留观察权重，否则降级"},
+            {"item": "国内映射是否有资金响应", "why": "判断能否转化为交易机会", "source": "A股/港股成交额、强弱排序、板块涨跌", "action": "放量跑赢则提高关注，否则只做资料跟踪"},
+            {"item": "是否出现反向证据", "why": "防止单边叙事误导", "source": "价格回撤、公司澄清、宏观或监管冲击", "action": "出现反证则降低仓位或移出观察池"},
+        ]
 
     coerced = dict(data)
     coerced.update(
         {
             "one_page": one_page,
             "key_calls": key_calls,
+            "deep_dives": deep_dives,
+            "action_plan": action_plan,
             "momentum_table": momentum,
-            "logic_chains": logic,
-            "opportunity_matrix": opportunities,
+            "source_view": source_view,
             "risk_radar": risks,
             "evidence": evidence,
             "tomorrow": tomorrow,
@@ -529,36 +619,78 @@ def _render_table(headers: list[str], rows: list[list[str]]) -> list[str]:
 def _render_report_data(data: dict[str, Any]) -> str:
     one_page = data.get("one_page") if isinstance(data.get("one_page"), dict) else {}
     key_calls = _safe_rows(data.get("key_calls"), 3)
+    deep_dives = _safe_rows(data.get("deep_dives"), 4)
+    action_plan = _safe_rows(data.get("action_plan"), 5)
     momentum = _safe_rows(data.get("momentum_table"), 5)
-    logic = _safe_rows(data.get("logic_chains"), 3)
-    opportunities = _safe_rows(data.get("opportunity_matrix"), 5)
+    source_view = _safe_rows(data.get("source_view"), 8)
     risks = _safe_rows(data.get("risk_radar"), 3)
-    evidence = _safe_rows(data.get("evidence"), 6)
-    tomorrow = _safe_rows(data.get("tomorrow"), 3)
+    evidence = _safe_rows(data.get("evidence"), 8)
+    tomorrow = _safe_rows(data.get("tomorrow"), 5)
 
     lines: list[str] = [
-        "## 一页决策看板",
+        "## 一页决策总览",
         "",
         "| 指标 | 判断 |",
         "|---|---|",
         f"| 市场温度 | {_safe_text(one_page.get('market_temperature'))} |",
         f"| 风险等级 | {_safe_text(one_page.get('risk_level'))} |",
-        f"| 核心结论 | {_safe_text(one_page.get('core_conclusion'))} |",
+        f"| 总体仓位 | {_safe_text(one_page.get('position'), '观察为主，小仓试探')} |",
+        f"| 今日结论 | {_safe_text(one_page.get('core_conclusion'))} |",
         f"| 普通投资者提示 | {_safe_text(one_page.get('investor_note'))} |",
+        f"| 今日不要做 | {_safe_text(one_page.get('avoid'), '不要把单条热帖当成买入理由')} |",
         "",
-        "## 核心结论",
+        "## 今日核心判断",
         "",
     ]
     for row in key_calls:
+        rank = _safe_text(row.get("rank"), "").strip()
+        prefix = f"#{rank} " if rank else ""
         lines.append(
-            f"- [{_safe_text(row.get('evidence'), 'C')}] {_safe_text(row.get('theme'))}"
-            f"：{_safe_text(row.get('direction'))}；国内映射：{_safe_text(row.get('china_map'))}"
+            f"- **{prefix}{_safe_text(row.get('theme'))}** [{_safe_text(row.get('evidence'), 'C')}级证据]"
+            f"：{_safe_text(row.get('direction'))}。理由：{_safe_text(row.get('why'))}"
+            f"；国内映射：{_safe_text(row.get('china_map'))}"
             f"；行动：{_safe_text(row.get('action'))}。"
         )
 
     lines += [
         "",
-        "## 市场动量图谱",
+        "## 主线深度拆解",
+        "",
+        *_render_table(
+            ["主线", "核心论点", "支持论据", "反向证据/缺口", "国内映射", "操作含义", "验证信号"],
+            [
+                [
+                    _safe_text(row.get("theme")),
+                    _safe_text(row.get("thesis")),
+                    _safe_text(row.get("bull")),
+                    _safe_text(row.get("bear")),
+                    _safe_text(row.get("china_map")),
+                    _safe_text(row.get("strategy")),
+                    _safe_text(row.get("watch")),
+                ]
+                for row in deep_dives
+            ],
+        ),
+        "",
+        "## 机会与仓位建议",
+        "",
+        *_render_table(
+            ["主题", "分层", "建议仓位", "介入条件", "加仓条件", "减仓/回避条件", "证伪信号"],
+            [
+                [
+                    _safe_text(row.get("theme")),
+                    _safe_text(row.get("bucket")),
+                    _safe_text(row.get("position")),
+                    _safe_text(row.get("entry")),
+                    _safe_text(row.get("add")),
+                    _safe_text(row.get("trim")),
+                    _safe_text(row.get("invalid")),
+                ]
+                for row in action_plan
+            ],
+        ),
+        "",
+        "## 市场动量与分歧",
         "",
         *_render_table(
             ["主题", "动量变化", "核心驱动", "下一步观察"],
@@ -573,39 +705,22 @@ def _render_report_data(data: dict[str, Any]) -> str:
             ],
         ),
         "",
-        "## 主线逻辑链",
+        "### 来源分布",
         "",
         *_render_table(
-            ["原始信号", "产业/资金逻辑", "国内映射", "投资结论"],
+            ["来源/博主", "立场", "对应主题", "贡献的关键证据"],
             [
                 [
-                    _safe_text(row.get("signal")),
-                    _safe_text(row.get("mechanism")),
-                    _safe_text(row.get("china_map")),
-                    _safe_text(row.get("conclusion")),
-                ]
-                for row in logic
-            ],
-        ),
-        "",
-        "## 机会矩阵",
-        "",
-        *_render_table(
-            ["主题", "受益方向", "证据", "拥挤度", "仓位态度", "证伪信号"],
-            [
-                [
+                    _safe_text(row.get("name")),
+                    _safe_text(row.get("stance")),
                     _safe_text(row.get("theme")),
-                    _safe_text(row.get("beneficiary")),
-                    _safe_text(row.get("evidence"), "C"),
-                    _safe_text(row.get("crowding")),
-                    _safe_text(row.get("strategy")),
-                    _safe_text(row.get("invalid")),
+                    _safe_text(row.get("point")),
                 ]
-                for row in opportunities
+                for row in source_view
             ],
         ),
         "",
-        "## 风险雷达",
+        "## 风险与证伪",
         "",
         *_render_table(
             ["风险", "触发条件", "影响", "应对"],
@@ -620,26 +735,29 @@ def _render_report_data(data: dict[str, Any]) -> str:
             ],
         ),
         "",
-        "## 证据链摘录",
+        "## 证据链",
         "",
     ]
     for row in evidence:
         lines.append(
-            f"- [{_safe_text(row.get('strength'), 'C')}] {_safe_text(row.get('source'), '未知来源')}"
-            f"：{_safe_text(row.get('summary'))}；链接：{_as_markdown_link(row.get('url'))}"
+            f"- [{_safe_text(row.get('strength'), 'C')}] **{_safe_text(row.get('theme'), '综合')}** / "
+            f"{_safe_text(row.get('source'), '未知来源')}：{_safe_text(row.get('summary'))}"
+            f"；用途：{_safe_text(row.get('use'), '支撑核心判断')}"
+            f"；链接：{_as_markdown_link(row.get('url'))}"
         )
 
     lines += [
         "",
-        "## 明日验证清单",
+        "## 明日行动清单",
         "",
         *_render_table(
-            ["验证事项", "为什么重要", "观察指标/来源"],
+            ["验证事项", "为什么重要", "观察指标/来源", "行动规则"],
             [
                 [
                     _safe_text(row.get("item")),
                     _safe_text(row.get("why")),
                     _safe_text(row.get("source")),
+                    _safe_text(row.get("action")),
                 ]
                 for row in tomorrow
             ],
@@ -695,8 +813,8 @@ def _normalize_report(content: str) -> str:
 
 
 def _ensure_evidence_links(content: str, records: list[dict[str, Any]]) -> str:
-    evidence_header = "## 证据链摘录"
-    next_header = "## 明日验证清单"
+    evidence_header = "## 证据链"
+    next_header = "## 明日行动清单"
     if evidence_header not in content or "链接：" in content:
         return content
     start = content.find(evidence_header)
@@ -704,7 +822,17 @@ def _ensure_evidence_links(content: str, records: list[dict[str, Any]]) -> str:
     if end == -1:
         return content
     lines = _evidence_lines(records, limit=4)
-    insert = evidence_header + "\n" + "\n".join(lines) + "\n"
+    enriched_lines = []
+    for line in lines:
+        match = re.match(r"- \[([ABCD])\] ([^：]+)：(.+?)；链接：(.+)$", line)
+        if match:
+            enriched_lines.append(
+                f"- [{match.group(1)}] **综合** / {match.group(2)}：{match.group(3)}"
+                f"；用途：支撑核心判断；链接：{_as_markdown_link(match.group(4))}"
+            )
+        else:
+            enriched_lines.append(line)
+    insert = evidence_header + "\n" + "\n".join(enriched_lines) + "\n"
     return content[:start] + insert + content[end:]
 
 
@@ -823,24 +951,30 @@ def _outline_from_records(records: list[dict[str, Any]], error: str | None = Non
         "one": {
             "temp": "中性偏热",
             "risk": "中",
+            "pos": "观察为主，小仓试探",
             "conclusion": f"{primary} 是当前最集中的跨来源线索，{secondary} 是第二观察方向。",
             "note": "先看证据是否连续强化，不因单条消息追高。",
+            "avoid": "不要把单条热帖当成买入理由。",
         },
         "calls": [
-            {"t": primary, "d": "强化/待确认", "e": "B", "map": "A股/港股产业链龙头、ETF、核心供应商", "act": "观察"},
-            {"t": secondary, "d": "待确认", "e": "C", "map": "相关设备、材料、应用链", "act": "等待"},
+            {"t": primary, "rank": "1", "d": "强化/待确认", "e": "B", "why": "多来源相关信息集中出现", "map": "A股/港股产业链龙头、ETF、核心供应商", "act": "观察"},
+            {"t": secondary, "rank": "2", "d": "待确认", "e": "C", "why": "已有主题热度但基本面证据不足", "map": "相关设备、材料、应用链", "act": "等待"},
+        ],
+        "deep": [
+            {"t": primary, "thesis": f"{primary} 是当前最值得优先跟踪的主线。", "bull": "最新信息与滚动上下文共同出现，说明不是单条孤立消息。", "bear": "仍缺少价格、订单或业绩层面的硬验证。", "map": "A股/港股产业链龙头、ETF、核心供应商", "strat": "纳入重点观察池，验证通过后再提高仓位。", "watch": "国内映射标的是否放量、板块是否跑赢。"},
+            {"t": secondary, "thesis": f"{secondary} 是第二观察方向。", "bull": "主题已被多条信息提及，具备扩散可能。", "bear": "证据强度弱于第一主线，容易停留在叙事层。", "map": "相关设备、材料、应用链", "strat": "等待确认，不急于追高。", "watch": "订单、价格、财报或政策催化是否出现。"},
+        ],
+        "plan": [
+            {"t": primary, "bucket": "观察/小仓试探", "pos": "轻仓", "entry": "连续两天跨来源强化且国内映射放量", "add": "出现订单、价格、业绩或产业新闻确认", "trim": "高位放量回落或证据降温", "bad": "主题热度下降且无基本面跟进"},
+            {"t": secondary, "bucket": "等待", "pos": "观察仓", "entry": "证据从观点层升级到数据/公告层", "add": "国内相关板块开始独立走强", "trim": "只有海外叙事、国内无响应", "bad": "连续多日无新增证据"},
         ],
         "mom": [
             {"t": primary, "chg": "强化/待确认", "drv": "最新信息与滚动上下文共同出现", "watch": "是否继续跨来源出现并获得资金响应"},
             {"t": secondary, "chg": "待确认", "drv": "主题热度进入观察区", "watch": "是否出现订单、价格或财报催化"},
         ],
-        "logic": [
-            {"sig": f"{primary} 相关信息密集出现", "mech": "多来源共振提升主题可信度", "map": "国内产业链映射", "con": "可进入重点观察池"},
-            {"sig": f"{secondary} 相关信息延续", "mech": "需要基本面证据确认", "map": "相关设备、材料、应用链", "con": "等确认后再提高权重"},
-        ],
-        "opp": [
-            {"t": primary, "ben": "产业链龙头、ETF、核心供应商", "e": "B/C", "crowd": "中", "strat": "观察/小仓试探", "bad": "证据减少或高位放量回落"},
-            {"t": secondary, "ben": "相关港股/A股映射", "e": "C", "crowd": "中", "strat": "等确认", "bad": "主题热度下降且无基本面跟进"},
+        "src": [
+            {"name": row.get("source") or "未知来源", "stance": "信息源", "theme": primary, "point": (row.get("text") or row.get("title") or "")[:70]}
+            for row in records[:6]
         ],
         "risk": [
             {"r": "主题拥挤", "trig": "热点只停留在观点层且涨幅过大", "imp": "情绪交易后回撤", "resp": "等订单/价格/业绩验证"},
@@ -848,9 +982,9 @@ def _outline_from_records(records: list[dict[str, Any]], error: str | None = Non
         ],
         "ev": evidence_rows,
         "next": [
-            {"it": "主题是否继续跨来源出现", "why": "判断动量是否延续", "src": "X/Nitter、微信公众号、微信群归档"},
-            {"it": "国内映射是否有资金响应", "why": "判断能否转化为交易机会", "src": "A股/港股成交额、强弱排序、板块涨跌"},
-            {"it": "是否出现反向证据", "why": "防止单边叙事误导", "src": "价格回撤、公司澄清、宏观或监管冲击"},
+            {"it": "主题是否继续跨来源出现", "why": "判断动量是否延续", "src": "X/Nitter、微信公众号、微信群归档", "act": "继续强化则保留观察权重，否则降级"},
+            {"it": "国内映射是否有资金响应", "why": "判断能否转化为交易机会", "src": "A股/港股成交额、强弱排序、板块涨跌", "act": "放量跑赢则提高关注，否则只做资料跟踪"},
+            {"it": "是否出现反向证据", "why": "防止单边叙事误导", "src": "价格回撤、公司澄清、宏观或监管冲击", "act": "出现反证则降低仓位或移出观察池"},
         ],
     }
 
@@ -884,86 +1018,6 @@ def fallback_summary(items: list[dict[str, Any]], error: str) -> str:
         max_text_len=MAX_TEXT_LEN,
         max_payload_chars=MAX_PAYLOAD_CHARS,
     )
-    latest_counts = _theme_counts(records, "latest")
-    recent_counts = _theme_counts(records, "recent")
-    top_themes = _top_themes(records)
-    primary_theme = top_themes[0][0]
-    secondary_theme = top_themes[1][0] if len(top_themes) > 1 else "相关产业链"
-    evidence = _evidence_lines(records)
-
-    changes: list[str] = []
-    for theme, count in top_themes:
-        latest_count = latest_counts.get(theme, 0)
-        recent_count = recent_counts.get(theme, 0)
-        if latest_count and recent_count:
-            label = "强化"
-        elif latest_count:
-            label = "新出现/待确认"
-        elif recent_count:
-            label = "延续但本次新增不足"
-        else:
-            label = "待确认"
-        changes.append(f"- {label}：{theme} 出现 {count} 条相关信号；需要用成交量、产业新闻和公司公告继续验证。")
-
-    change_text = "\n".join(changes[:4])
-    evidence_text = "\n".join(evidence)
     escaped_error = error.replace("\n", " ")[:220]
-
-    return f"""> ⚠️ LLM 调用失败，以下为规则引擎生成的产品化简报；失败原因：{escaped_error}
-
-## 一页决策看板
-
-| 指标 | 判断 |
-|---|---|
-| 市场温度 | 中性偏热 |
-| 风险等级 | 中 |
-| 核心结论 | {primary_theme} 是当前最集中的跨来源线索，{secondary_theme} 是第二观察方向。 |
-| 普通投资者提示 | 先看动量是否持续，不因单条消息追高；等待成交量、订单或公告验证。 |
-
-## 核心结论
-
-- [B] {primary_theme}：多来源交叉出现，适合作为国内资本市场优先观察方向；行动：观察/小仓试探。
-- [C] {secondary_theme}：需要等待价格、订单、财报或政策催化确认；行动：等待确认。
-- [C] 若新增信息较少，本报告使用最近几天上下文判断动量延续，避免单日空窗误判趋势消失。
-
-## 市场动量图谱
-
-| 主题 | 动量变化 | 核心驱动 | 下一步观察 |
-|---|---|---|---|
-| {primary_theme} | 强化/待确认 | 最新信息与滚动上下文共同出现 | 是否继续跨来源出现并获得资金响应 |
-| {secondary_theme} | 待确认 | 主题热度进入观察区 | 是否出现订单、价格或财报催化 |
-
-## 主线逻辑链
-
-| 原始信号 | 产业/资金逻辑 | 国内映射 | 投资结论 |
-|---|---|---|---|
-| {primary_theme} 相关信息密集出现 | 多来源共振提升主题可信度 | A股/港股产业链龙头、ETF、核心供应商 | 可进入重点观察池 |
-| {secondary_theme} 相关信息延续 | 需要基本面证据确认 | 相关设备、材料、应用链 | 等确认后再提高权重 |
-
-## 机会矩阵
-
-| 主题 | 受益方向 | 证据 | 拥挤度 | 仓位态度 | 证伪信号 |
-|---|---|---|---|---|---|
-| {primary_theme} | 产业链龙头、ETF、核心供应商 | B/C | 中 | 观察/小仓试探 | 证据减少或高位放量回落 |
-| {secondary_theme} | 相关港股/A股映射 | C | 中 | 等确认 | 主题热度下降且无基本面跟进 |
-
-## 风险雷达
-
-| 风险 | 触发条件 | 影响 | 应对 |
-|---|---|---|---|
-| 模型链路异常 | LLM 调用失败或返回不完整 | 分析深度下降 | 使用规则版，只做观察不做重仓依据 |
-| 主题拥挤 | 热点只停留在观点层且涨幅过大 | 情绪交易后回撤 | 等订单/价格/业绩验证 |
-| 映射错配 | 海外叙事强但国内兑现弱 | A股/港股跟涨失败 | 盯成交额、强弱排序和公司公告 |
-
-## 证据链摘录
-{evidence_text}
-
-## 明日验证清单
-| 要验证什么 | 为什么重要 | 观察指标/来源 |
-|---|---|---|
-| 主题是否继续跨来源出现 | 判断动量是否延续 | X/Nitter、微信公众号、微信群归档 |
-| 国内映射是否有资金响应 | 判断能否转化为交易机会 | A股/港股成交额、强弱排序、板块涨跌 |
-| 是否出现反向证据 | 防止单边叙事误导 | 价格回撤、公司澄清、宏观或监管冲击 |
-
----
-仅供研究，不构成投资建议。"""
+    outline = _coerce_report_data(_outline_from_records(records, escaped_error))
+    return f"> ⚠️ LLM 调用失败，以下为规则引擎生成的产品化简报；失败原因：{escaped_error}\n\n{_render_report_data(outline)}"
